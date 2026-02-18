@@ -1,13 +1,14 @@
 from __future__ import annotations
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QSlider, QComboBox
+    QPushButton, QLabel, QSlider, QComboBox,
+    QCheckBox, QSpinBox
 )
-from PySide6.QtCore import Qt
 
 from src.app.core.ca import ForestFireCA, CAConfig
 from src.app.ui.grid_widget import GridWidget
+
 
 def slider_float(label: str, min_v: float, max_v: float, init: float, steps: int = 1000):
     """Хелпер: слайдер 0..steps, мапиться в float min..max"""
@@ -33,12 +34,13 @@ def slider_float(label: str, min_v: float, max_v: float, init: float, steps: int
 
     return row, lab, s, to_float
 
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Forest Fire CA Simulator")
 
-        self.cfg = CAConfig(width=200, height=200, p=0.01, f=0.001, neighborhood="moore")
+        self.cfg = CAConfig(width=80, height=60, p=0.01, f=0.001, neighborhood="moore", lightning_enabled=True)
         self.ca = ForestFireCA(self.cfg)
 
         central = QWidget()
@@ -54,6 +56,9 @@ class MainWindow(QMainWindow):
         panel_l = QVBoxLayout(panel)
         root.addWidget(panel, 2)
 
+        # Підказка
+        panel_l.addWidget(QLabel("Tip: Left-click on the grid to ignite a cell"))
+
         # Кнопки
         btn_row = QHBoxLayout()
         self.btn_start = QPushButton("Start")
@@ -66,12 +71,34 @@ class MainWindow(QMainWindow):
         btn_row.addWidget(self.btn_reset)
         panel_l.addLayout(btn_row)
 
+        # Grid size controls
+        panel_l.addWidget(QLabel("Grid size:"))
+        size_row = QHBoxLayout()
+        self.w_spin = QSpinBox()
+        self.h_spin = QSpinBox()
+        self.w_spin.setRange(10, 500)
+        self.h_spin.setRange(10, 500)
+        self.w_spin.setValue(self.cfg.width)
+        self.h_spin.setValue(self.cfg.height)
+        self.btn_apply_size = QPushButton("Apply")
+        size_row.addWidget(QLabel("W"))
+        size_row.addWidget(self.w_spin)
+        size_row.addWidget(QLabel("H"))
+        size_row.addWidget(self.h_spin)
+        size_row.addWidget(self.btn_apply_size)
+        panel_l.addLayout(size_row)
+
         # Neighborhood
         self.cmb_neigh = QComboBox()
         self.cmb_neigh.addItems(["moore", "von_neumann"])
         self.cmb_neigh.setCurrentText(self.cfg.neighborhood)
         panel_l.addWidget(QLabel("Neighborhood:"))
         panel_l.addWidget(self.cmb_neigh)
+
+        # Lightning toggle (Variant C)
+        self.chk_lightning = QCheckBox("Lightning enabled (random ignition)")
+        self.chk_lightning.setChecked(self.cfg.lightning_enabled)
+        panel_l.addWidget(self.chk_lightning)
 
         # Слайдери p і f
         p_row, self.p_lab, self.p_slider, self.p_to_float = slider_float("p (growth)", 0.0, 0.05, self.cfg.p)
@@ -106,13 +133,21 @@ class MainWindow(QMainWindow):
         self.btn_step.clicked.connect(self.on_step)
         self.btn_reset.clicked.connect(self.on_reset)
 
+        self.btn_apply_size.clicked.connect(self.on_apply_size)
+
         self.p_slider.valueChanged.connect(self.on_params_changed)
         self.f_slider.valueChanged.connect(self.on_params_changed)
         self.cmb_neigh.currentTextChanged.connect(self.on_neigh_changed)
         self.speed_slider.valueChanged.connect(self.on_speed_changed)
 
+        self.chk_lightning.toggled.connect(self.on_lightning_toggled)
+
+        # Клік по сітці -> ручне займання
+        self.grid_widget.cell_clicked.connect(self.on_cell_clicked)
+
         # Перший рендер
         self.grid_widget.set_grid(self.ca.grid)
+        self._update_f_label_and_state()
 
     def on_start(self):
         self.timer.start(self.speed_slider.value())
@@ -129,6 +164,26 @@ class MainWindow(QMainWindow):
         self.grid_widget.set_grid(self.ca.grid)
         self.stats.setText(f"Step: {self.ca.step_count}")
 
+    def on_apply_size(self):
+        """Змінює розмір сітки (для наглядності клітинки будуть більші при меншій сітці)."""
+        self.timer.stop()
+
+        new_w = int(self.w_spin.value())
+        new_h = int(self.h_spin.value())
+
+        self.cfg.width = new_w
+        self.cfg.height = new_h
+
+        # Пересоздаємо CA, щоб коректно створити нову матрицю
+        self.ca = ForestFireCA(self.cfg)
+        self.grid_widget.set_grid(self.ca.grid)
+        self.stats.setText(f"Step: {self.ca.step_count}")
+
+    def on_cell_clicked(self, row: int, col: int):
+        """Ручний старт/додавання вогню кліком."""
+        self.ca.ignite(row, col)
+        self.grid_widget.set_grid(self.ca.grid)
+
     def on_tick(self):
         self.ca.step()
         self.grid_widget.set_grid(self.ca.grid)
@@ -138,7 +193,7 @@ class MainWindow(QMainWindow):
         self.cfg.p = float(self.p_to_float(self.p_slider.value()))
         self.cfg.f = float(self.f_to_float(self.f_slider.value()))
         self.p_lab.setText(f"p (growth): {self.cfg.p:.4f}")
-        self.f_lab.setText(f"f (lightning): {self.cfg.f:.4f}")
+        self._update_f_label_and_state()
 
     def on_neigh_changed(self, text: str):
         self.cfg.neighborhood = text
@@ -147,3 +202,16 @@ class MainWindow(QMainWindow):
         self.speed_lab.setText(f"Speed (ms): {v}")
         if self.timer.isActive():
             self.timer.start(v)
+
+    def on_lightning_toggled(self, checked: bool):
+        self.cfg.lightning_enabled = bool(checked)
+        self._update_f_label_and_state()
+
+    def _update_f_label_and_state(self):
+        """Оновлює напис для f та (опційно) блокує/розблоковує слайдер."""
+        # Слайдер f можна вимкнути, щоб було явно: блискавка OFF
+        self.f_slider.setEnabled(self.cfg.lightning_enabled)
+
+        status = "ON" if self.cfg.lightning_enabled else "OFF"
+        eff = self.cfg.f if self.cfg.lightning_enabled else 0.0
+        self.f_lab.setText(f"f (lightning): {self.cfg.f:.4f}  | effective: {eff:.4f} ({status})")

@@ -9,10 +9,12 @@ class CAConfig:
     width: int = 200
     height: int = 200
     p: float = 0.01       # ріст
-    f: float = 0.001      # блискавка
-    neighborhood: str = "moore"  # "moore" (8) або "von_neumann" (4)
+    f: float = 0.001      # блискавка (ймовірність)
+    lightning_enabled: bool = True  # <--- ВАРІАНТ C: перемикач
+    neighborhood: str = "moore"      # "moore" (8) або "von_neumann" (4)
     init_tree_density: float = 0.6
     seed: int | None = None
+
 
 class ForestFireCA:
     def __init__(self, cfg: CAConfig):
@@ -34,12 +36,22 @@ class ForestFireCA:
         ).astype(np.uint8)
         self.step_count = 0
 
+    def ignite(self, row: int, col: int):
+        """Ручне займання: користувач клікає по клітинці."""
+        if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
+            self.grid[row, col] = BURNING
+
     def _burning_neighbors(self, burning_mask: np.ndarray) -> np.ndarray:
         """Повертає bool-матрицю: чи є палаючий сусід."""
         if self.cfg.neighborhood == "von_neumann":
-            shifts = [(-1,0), (1,0), (0,-1), (0,1)]
+            shifts = [(-1, 0), (1, 0), (0, -1), (0, 1)]
         else:  # moore
-            shifts = [(dx, dy) for dx in (-1,0,1) for dy in (-1,0,1) if not (dx==0 and dy==0)]
+            shifts = [
+                (dx, dy)
+                for dx in (-1, 0, 1)
+                for dy in (-1, 0, 1)
+                if not (dx == 0 and dy == 0)
+            ]
 
         neigh = np.zeros_like(burning_mask, dtype=np.uint8)
         for dx, dy in shifts:
@@ -54,8 +66,12 @@ class ForestFireCA:
 
         has_burning_neighbor = self._burning_neighbors(burning)
 
-        # Правило 3: блискавка
-        lightning = self.rng.random(g.shape) < self.cfg.f
+        # Правило 3: блискавка (вимикається чекбоксом)
+        f_eff = self.cfg.f if self.cfg.lightning_enabled else 0.0
+        if f_eff > 0:
+            lightning = self.rng.random(g.shape) < f_eff
+        else:
+            lightning = np.zeros_like(tree, dtype=bool)
 
         # Правило 2 + 3: займання
         ignite = tree & (has_burning_neighbor | lightning)
@@ -72,5 +88,3 @@ class ForestFireCA:
         self.grid = next_g
         self.step_count += 1
         return self.grid
-
-
