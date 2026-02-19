@@ -9,9 +9,13 @@ EMPTY, TREE, BURNING = 0, 1, 2
 class CAConfig:
     width: int = 200
     height: int = 200
-    p: float = 0.01                 # ріст
+
+    p: float = 0.01                 # ріст (базовий)
     f: float = 0.001                # блискавка
     lightning_enabled: bool = True  # Variant C
+
+    # Humidity: 0.0 = дуже сухо, 1.0 = дуже волого
+    humidity: float = 0.0
 
     # Wind
     wind_enabled: bool = False
@@ -66,7 +70,6 @@ class ForestFireCA:
             if self.grid[row, col] == TREE:
                 self.grid[row, col] = BURNING
 
-
     def _shift_no_wrap(self, mask: np.ndarray, dx: int, dy: int) -> np.ndarray:
         """
         Аналог np.roll, але БЕЗ wrap-around.
@@ -88,8 +91,8 @@ class ForestFireCA:
 
     def _spread_prob(self, dx: int, dy: int) -> float:
         """
-        Ймовірність займання від палаючого сусіда в напрямку (dx,dy) source->target.
-        Якщо wind вимкнений — 1.0 (класичне правило 2).
+        Базова ймовірність займання від палаючого сусіда в напрямку (dx,dy) source->target
+        з урахуванням ВІТРУ. Вологість застосовуємо в step().
         """
         if not self.cfg.wind_enabled or self.cfg.wind_strength <= 0:
             return 1.0
@@ -100,9 +103,6 @@ class ForestFireCA:
         w_norm = (wx * wx + wy * wy) ** 0.5
         dot = (dx * wx + dy * wy) / (d_norm * w_norm)  # [-1..1]
 
-        # downwind(dot=1) => 1
-        # crosswind(dot=0) => 1 - s/2
-        # upwind(dot=-1) => 1 - s
         s = float(self.cfg.wind_strength)
         p = 1.0 - s * (1.0 - dot) / 2.0
         return float(np.clip(p, 0.0, 1.0))
@@ -113,7 +113,11 @@ class ForestFireCA:
         tree = (g == TREE)
         empty = (g == EMPTY)
 
-        # Rule 2 (Moore + wind, без wrap-around)
+        # Humidity: чим більша вологість, тим менше "сухість"
+        humidity = float(np.clip(self.cfg.humidity, 0.0, 1.0))
+        dryness = 1.0 - humidity  # 1 = сухо, 0 = дуже волого
+
+        # Rule 2 (Moore + wind + humidity, без wrap-around)
         ignite_from_neighbors = np.zeros_like(tree, dtype=bool)
 
         for dx, dy in self._DIRS:
@@ -122,14 +126,16 @@ class ForestFireCA:
             if not candidates.any():
                 continue
 
-            p_dir = self._spread_prob(dx, dy)
-            if p_dir >= 1.0:
-                ignite_from_neighbors |= candidates
-            elif p_dir > 0.0:
-                ignite_from_neighbors |= candidates & (self.rng.random(g.shape) < p_dir)
+            p_wind = self._spread_prob(dx, dy)
+            p_eff = p_wind * dryness  # <- вологість зменшує поширення
 
-        # Rule 3 (lightning, Variant C)
-        f_eff = self.cfg.f if self.cfg.lightning_enabled else 0.0
+            if p_eff >= 1.0:
+                ignite_from_neighbors |= candidates
+            elif p_eff > 0.0:
+                ignite_from_neighbors |= candidates & (self.rng.random(g.shape) < p_eff)
+
+        # Rule 3 (lightning, Variant C) + humidity
+        f_eff = (self.cfg.f if self.cfg.lightning_enabled else 0.0) * dryness
         if f_eff > 0.0:
             lightning = self.rng.random(g.shape) < f_eff
         else:
@@ -137,8 +143,10 @@ class ForestFireCA:
 
         ignite = ignite_from_neighbors | (tree & lightning)
 
-        # Rule 1 (growth)
-        grow = empty & (self.rng.random(g.shape) < self.cfg.p)
+        # Rule 1 (growth) + humidity (NEW)
+        # p_eff = p * (0.5 + humidity): в посуху рост гірший, у вологу — кращий
+        p_eff = float(np.clip(self.cfg.p * (0.5 + humidity), 0.0, 1.0))
+        grow = empty & (self.rng.random(g.shape) < p_eff)
 
         # Rule 4 (burning -> empty)
         next_g = np.full(g.shape, EMPTY, dtype=np.uint8)
@@ -149,5 +157,3 @@ class ForestFireCA:
         self.grid = next_g
         self.step_count += 1
         return self.grid
-
-

@@ -39,7 +39,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Forest Fire CA Simulator (Moore)")
 
         # тільки Moore, без neighborhood
-        self.cfg = CAConfig(width=20, height=20, p=0.01, f=0.001, lightning_enabled=True)
+        self.cfg = CAConfig(
+            width=20,
+            height=20,
+            p=0.01,
+            f=0.001,
+            lightning_enabled=True,
+            humidity=0.20,   # стартова вологість (NEW)
+        )
         self.ca = ForestFireCA(self.cfg)
 
         central = QWidget()
@@ -112,6 +119,18 @@ class MainWindow(QMainWindow):
         self.cmb_wind.setEnabled(self.cfg.wind_enabled)
         self.wind_slider.setEnabled(self.cfg.wind_enabled)
 
+        # Humidity (NEW)
+        hum_row = QWidget()
+        hum_l = QHBoxLayout(hum_row)
+        hum_l.setContentsMargins(0, 0, 0, 0)
+        self.hum_lab = QLabel(f"Humidity: {self.cfg.humidity:.2f}")
+        self.hum_slider = QSlider(Qt.Horizontal)
+        self.hum_slider.setRange(0, 100)
+        self.hum_slider.setValue(int(self.cfg.humidity * 100))
+        hum_l.addWidget(self.hum_lab, 1)
+        hum_l.addWidget(self.hum_slider, 4)
+        panel_l.addWidget(hum_row)
+
         # Lightning (Variant C)
         self.chk_lightning = QCheckBox("Lightning enabled (random ignition)")
         self.chk_lightning.setChecked(self.cfg.lightning_enabled)
@@ -161,6 +180,8 @@ class MainWindow(QMainWindow):
         self.cmb_wind.currentTextChanged.connect(self.on_wind_dir_changed)
         self.wind_slider.valueChanged.connect(self.on_wind_strength_changed)
 
+        self.hum_slider.valueChanged.connect(self.on_humidity_changed)  # NEW
+
         self.grid_widget.cell_clicked.connect(self.on_cell_clicked)
 
         # First render
@@ -198,10 +219,6 @@ class MainWindow(QMainWindow):
         if before != TREE:
             self.statusBar().showMessage("Підпал можливий тільки на клітинках з деревом", 2000)
 
-    # def on_cell_clicked(self, row: int, col: int):
-    #     self.ca.ignite(row, col)
-    #     self.grid_widget.set_grid(self.ca.grid)
-
     def on_tick(self):
         self.ca.step()
         self.grid_widget.set_grid(self.ca.grid)
@@ -233,6 +250,10 @@ class MainWindow(QMainWindow):
     def on_wind_strength_changed(self, v: int):
         self.cfg.wind_strength = v / 100.0
         self.wind_lab.setText(f"Wind strength: {self.cfg.wind_strength:.2f}")
+
+    def on_humidity_changed(self, v: int):
+        self.cfg.humidity = v / 100.0
+        self.hum_lab.setText(f"Humidity: {self.cfg.humidity:.2f}")
 
     def _update_f_label_and_state(self):
         self.f_slider.setEnabled(self.cfg.lightning_enabled)
