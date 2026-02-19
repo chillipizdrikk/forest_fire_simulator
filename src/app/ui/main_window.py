@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QSpinBox
 )
 
-from src.app.core.ca import ForestFireCA, CAConfig
+from src.app.core.ca import ForestFireCA, CAConfig, EMPTY, TREE, BURNING
 from src.app.ui.grid_widget import GridWidget
 
 
@@ -191,8 +191,16 @@ class MainWindow(QMainWindow):
         self.stats.setText(f"Step: {self.ca.step_count}")
 
     def on_cell_clicked(self, row: int, col: int):
+        before = self.ca.grid[row, col]
         self.ca.ignite(row, col)
         self.grid_widget.set_grid(self.ca.grid)
+
+        if before != TREE:
+            self.statusBar().showMessage("Підпал можливий тільки на клітинках з деревом", 2000)
+
+    # def on_cell_clicked(self, row: int, col: int):
+    #     self.ca.ignite(row, col)
+    #     self.grid_widget.set_grid(self.ca.grid)
 
     def on_tick(self):
         self.ca.step()

@@ -61,9 +61,11 @@ class ForestFireCA:
         self.step_count = 0
 
     def ignite(self, row: int, col: int):
-        """Ручне займання кліком."""
+        """Ручне займання кліком. Дозволяємо підпал лише клітин з деревом."""
         if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
-            self.grid[row, col] = BURNING
+            if self.grid[row, col] == TREE:
+                self.grid[row, col] = BURNING
+
 
     def _shift_no_wrap(self, mask: np.ndarray, dx: int, dy: int) -> np.ndarray:
         """
