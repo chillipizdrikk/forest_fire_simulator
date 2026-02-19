@@ -4,19 +4,43 @@ from dataclasses import dataclass
 
 EMPTY, TREE, BURNING = 0, 1, 2
 
+
 @dataclass
 class CAConfig:
     width: int = 200
     height: int = 200
-    p: float = 0.01       # ріст
-    f: float = 0.001      # блискавка (ймовірність)
-    lightning_enabled: bool = True  # <--- ВАРІАНТ C: перемикач
-    neighborhood: str = "moore"      # "moore" (8) або "von_neumann" (4)
+    p: float = 0.01                 # ріст
+    f: float = 0.001                # блискавка
+    lightning_enabled: bool = True  # Variant C
+
+    # Wind
+    wind_enabled: bool = False
+    wind_dir: str = "E"             # N, NE, E, SE, S, SW, W, NW
+    wind_strength: float = 0.6      # 0..1
+
     init_tree_density: float = 0.6
     seed: int | None = None
 
 
 class ForestFireCA:
+    # Moore directions only (8 сусідів)
+    _DIRS = [
+        (-1, -1), (-1, 0), (-1, 1),
+        (0, -1),           (0, 1),
+        (1, -1),  (1, 0),  (1, 1),
+    ]
+
+    _WIND_DIRS = {
+        "N": (-1, 0),
+        "NE": (-1, 1),
+        "E": (0, 1),
+        "SE": (1, 1),
+        "S": (1, 0),
+        "SW": (1, -1),
+        "W": (0, -1),
+        "NW": (-1, -1),
+    }
+
     def __init__(self, cfg: CAConfig):
         self.cfg = cfg
         self.rng = np.random.default_rng(cfg.seed)
@@ -37,26 +61,49 @@ class ForestFireCA:
         self.step_count = 0
 
     def ignite(self, row: int, col: int):
-        """Ручне займання: користувач клікає по клітинці."""
+        """Ручне займання кліком."""
         if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
             self.grid[row, col] = BURNING
 
-    def _burning_neighbors(self, burning_mask: np.ndarray) -> np.ndarray:
-        """Повертає bool-матрицю: чи є палаючий сусід."""
-        if self.cfg.neighborhood == "von_neumann":
-            shifts = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-        else:  # moore
-            shifts = [
-                (dx, dy)
-                for dx in (-1, 0, 1)
-                for dy in (-1, 0, 1)
-                if not (dx == 0 and dy == 0)
-            ]
+    def _shift_no_wrap(self, mask: np.ndarray, dx: int, dy: int) -> np.ndarray:
+        """
+        Аналог np.roll, але БЕЗ wrap-around.
+        out[i,j] = mask[i-dx, j-dy] якщо індекси в межах, інакше 0/False.
+        """
+        h, w = mask.shape
+        out = np.zeros_like(mask, dtype=mask.dtype)
 
-        neigh = np.zeros_like(burning_mask, dtype=np.uint8)
-        for dx, dy in shifts:
-            neigh |= np.roll(np.roll(burning_mask, dx, axis=0), dy, axis=1)
-        return neigh.astype(bool)
+        xs0 = max(0, -dx)
+        xs1 = h - max(0, dx)
+        ys0 = max(0, -dy)
+        ys1 = w - max(0, dy)
+
+        xd0 = max(0, dx)
+        yd0 = max(0, dy)
+
+        out[xd0:xd0 + (xs1 - xs0), yd0:yd0 + (ys1 - ys0)] = mask[xs0:xs1, ys0:ys1]
+        return out
+
+    def _spread_prob(self, dx: int, dy: int) -> float:
+        """
+        Ймовірність займання від палаючого сусіда в напрямку (dx,dy) source->target.
+        Якщо wind вимкнений — 1.0 (класичне правило 2).
+        """
+        if not self.cfg.wind_enabled or self.cfg.wind_strength <= 0:
+            return 1.0
+
+        wx, wy = self._WIND_DIRS.get(self.cfg.wind_dir, (0, 1))
+
+        d_norm = (dx * dx + dy * dy) ** 0.5
+        w_norm = (wx * wx + wy * wy) ** 0.5
+        dot = (dx * wx + dy * wy) / (d_norm * w_norm)  # [-1..1]
+
+        # downwind(dot=1) => 1
+        # crosswind(dot=0) => 1 - s/2
+        # upwind(dot=-1) => 1 - s
+        s = float(self.cfg.wind_strength)
+        p = 1.0 - s * (1.0 - dot) / 2.0
+        return float(np.clip(p, 0.0, 1.0))
 
     def step(self):
         g = self.grid
@@ -64,22 +111,34 @@ class ForestFireCA:
         tree = (g == TREE)
         empty = (g == EMPTY)
 
-        has_burning_neighbor = self._burning_neighbors(burning)
+        # Rule 2 (Moore + wind, без wrap-around)
+        ignite_from_neighbors = np.zeros_like(tree, dtype=bool)
 
-        # Правило 3: блискавка (вимикається чекбоксом)
+        for dx, dy in self._DIRS:
+            src_burning = self._shift_no_wrap(burning, dx, dy)
+            candidates = tree & src_burning
+            if not candidates.any():
+                continue
+
+            p_dir = self._spread_prob(dx, dy)
+            if p_dir >= 1.0:
+                ignite_from_neighbors |= candidates
+            elif p_dir > 0.0:
+                ignite_from_neighbors |= candidates & (self.rng.random(g.shape) < p_dir)
+
+        # Rule 3 (lightning, Variant C)
         f_eff = self.cfg.f if self.cfg.lightning_enabled else 0.0
-        if f_eff > 0:
+        if f_eff > 0.0:
             lightning = self.rng.random(g.shape) < f_eff
         else:
             lightning = np.zeros_like(tree, dtype=bool)
 
-        # Правило 2 + 3: займання
-        ignite = tree & (has_burning_neighbor | lightning)
+        ignite = ignite_from_neighbors | (tree & lightning)
 
-        # Правило 1: ріст
+        # Rule 1 (growth)
         grow = empty & (self.rng.random(g.shape) < self.cfg.p)
 
-        # Правило 4: burning -> empty
+        # Rule 4 (burning -> empty)
         next_g = np.full(g.shape, EMPTY, dtype=np.uint8)
         next_g[tree & ~ignite] = TREE
         next_g[grow] = TREE
@@ -88,3 +147,5 @@ class ForestFireCA:
         self.grid = next_g
         self.step_count += 1
         return self.grid
+
+
