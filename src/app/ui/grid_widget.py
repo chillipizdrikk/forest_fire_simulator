@@ -6,48 +6,44 @@ from PySide6.QtWidgets import QWidget
 
 from src.app.utils.palette import PALETTE
 
+
 class GridWidget(QWidget):
-    cell_clicked = Signal(int, int)  # row, col
+    cell_clicked = Signal(int, int)         # left click
+    cell_right_clicked = Signal(int, int)   # NEW: right click
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._grid: np.ndarray | None = None
-        self._rgb: np.ndarray | None = None  # важливо тримати посилання, щоб QImage не “вмер”
+        self._rgb: np.ndarray | None = None
         self.setMinimumSize(400, 400)
 
     def set_grid(self, grid: np.ndarray):
         self._grid = grid
-        self._rgb = PALETTE[grid]  # (h,w,3) uint8
+        self._rgb = PALETTE[grid]
         self.update()
 
     def mousePressEvent(self, event):
         if self._grid is None:
-            return
-        if event.button() != Qt.LeftButton:
             return
 
         rect = self.rect()
         if rect.width() <= 0 or rect.height() <= 0:
             return
 
-        # координати кліку у віджеті
         pos = event.position()
-        x = pos.x()
-        y = pos.y()
+        x, y = pos.x(), pos.y()
 
         h, w = self._grid.shape
-
-        # мапимо координати кліку на індекси сітки
         col = int(x / rect.width() * w)
         row = int(y / rect.height() * h)
 
-        # clamp
-        if col < 0: col = 0
-        if row < 0: row = 0
-        if col >= w: col = w - 1
-        if row >= h: row = h - 1
+        col = max(0, min(w - 1, col))
+        row = max(0, min(h - 1, row))
 
-        self.cell_clicked.emit(row, col)
+        if event.button() == Qt.LeftButton:
+            self.cell_clicked.emit(row, col)
+        elif event.button() == Qt.RightButton:
+            self.cell_right_clicked.emit(row, col)
 
     def paintEvent(self, event):
         if self._grid is None or self._rgb is None:

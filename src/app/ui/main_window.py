@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QSpinBox
 )
 
-from src.app.core.ca import ForestFireCA, CAConfig, EMPTY, TREE_DECID, TREE_CONIF, BURNING
+from src.app.core.ca import ForestFireCA, CAConfig, EMPTY, TREE_DECID, TREE_CONIF, BURNING, BARRIER
 from src.app.ui.grid_widget import GridWidget
 
 
@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):
         panel_l = QVBoxLayout(panel)
         root.addWidget(panel, 2)
 
-        panel_l.addWidget(QLabel("Tip: Left-click on the grid to ignite a cell"))
+        panel_l.addWidget(QLabel("Left-click: ignite | Right-click: toggle barrier"))
         panel_l.addWidget(QLabel("Neighborhood: Moore (8-neighbor)"))
 
         # Buttons
@@ -217,6 +217,7 @@ class MainWindow(QMainWindow):
         self.flamm_c_slider.valueChanged.connect(self.on_flammability_changed)
 
         self.grid_widget.cell_clicked.connect(self.on_cell_clicked)
+        self.grid_widget.cell_right_clicked.connect(self.on_cell_right_clicked)
 
         # First render
         self.grid_widget.set_grid(self.ca.grid)
@@ -252,6 +253,10 @@ class MainWindow(QMainWindow):
 
         if int(before) not in (TREE_DECID, TREE_CONIF):
             self.statusBar().showMessage("Підпал можливий тільки на клітинках з деревом", 2000)
+
+    def on_cell_right_clicked(self, row: int, col: int):
+        self.ca.toggle_barrier(row, col)
+        self.grid_widget.set_grid(self.ca.grid)
 
     def on_tick(self):
         self.ca.step()
