@@ -2,7 +2,13 @@ from __future__ import annotations
 import numpy as np
 from dataclasses import dataclass
 
-EMPTY, TREE, BURNING = 0, 1, 2
+# States
+EMPTY = 0
+TREE_DECID = 1   # листяні
+TREE_CONIF = 2   # хвойні
+BURNING = 3
+
+TREE_STATES = (TREE_DECID, TREE_CONIF)
 
 
 @dataclass
@@ -24,6 +30,11 @@ class CAConfig:
 
     init_tree_density: float = 0.6
     seed: int | None = None
+
+    # Vegetation types (NEW)
+    conifer_ratio: float = 0.5      # частка хвойних серед усіх дерев [0..1]
+    flamm_decid: float = 0.65       # займистість листяних (множник)
+    flamm_conif: float = 0.85       # займистість хвойних (множник)
 
 
 class ForestFireCA:
@@ -48,26 +59,35 @@ class ForestFireCA:
     def __init__(self, cfg: CAConfig):
         self.cfg = cfg
         self.rng = np.random.default_rng(cfg.seed)
-        self.grid = np.where(
-            self.rng.random((cfg.height, cfg.width)) < cfg.init_tree_density,
-            TREE,
-            EMPTY
-        ).astype(np.uint8)
+        self.grid = self._make_initial_grid()
         self.step_count = 0
 
-    def reset(self):
+    def _make_initial_grid(self) -> np.ndarray:
         cfg = self.cfg
-        self.grid = np.where(
-            self.rng.random((cfg.height, cfg.width)) < cfg.init_tree_density,
-            TREE,
-            EMPTY
-        ).astype(np.uint8)
+        h, w = cfg.height, cfg.width
+
+        grid = np.full((h, w), EMPTY, dtype=np.uint8)
+
+        # де взагалі є дерево
+        has_tree = self.rng.random((h, w)) < float(np.clip(cfg.init_tree_density, 0.0, 1.0))
+
+        # який тип дерева
+        conif_ratio = float(np.clip(cfg.conifer_ratio, 0.0, 1.0))
+        is_conif = has_tree & (self.rng.random((h, w)) < conif_ratio)
+        is_decid = has_tree & ~is_conif
+
+        grid[is_decid] = TREE_DECID
+        grid[is_conif] = TREE_CONIF
+        return grid
+
+    def reset(self):
+        self.grid = self._make_initial_grid()
         self.step_count = 0
 
     def ignite(self, row: int, col: int):
         """Ручне займання кліком. Дозволяємо підпал лише клітин з деревом."""
         if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
-            if self.grid[row, col] == TREE:
+            if int(self.grid[row, col]) in TREE_STATES:
                 self.grid[row, col] = BURNING
 
     def _shift_no_wrap(self, mask: np.ndarray, dx: int, dy: int) -> np.ndarray:
@@ -92,7 +112,7 @@ class ForestFireCA:
     def _spread_prob(self, dx: int, dy: int) -> float:
         """
         Базова ймовірність займання від палаючого сусіда в напрямку (dx,dy) source->target
-        з урахуванням ВІТРУ. Вологість застосовуємо в step().
+        з урахуванням ВІТРУ. Вологість і тип рослинності застосовуємо в step().
         """
         if not self.cfg.wind_enabled or self.cfg.wind_strength <= 0:
             return 1.0
@@ -109,49 +129,74 @@ class ForestFireCA:
 
     def step(self):
         g = self.grid
+
         burning = (g == BURNING)
-        tree = (g == TREE)
+        decid = (g == TREE_DECID)
+        conif = (g == TREE_CONIF)
+        is_tree = decid | conif
         empty = (g == EMPTY)
 
         # Humidity: чим більша вологість, тим менше "сухість"
         humidity = float(np.clip(self.cfg.humidity, 0.0, 1.0))
         dryness = 1.0 - humidity  # 1 = сухо, 0 = дуже волого
 
-        # Rule 2 (Moore + wind + humidity, без wrap-around)
-        ignite_from_neighbors = np.zeros_like(tree, dtype=bool)
+        # Flammability matrix (NEW)
+        flamm_decid = float(np.clip(self.cfg.flamm_decid, 0.0, 5.0))
+        flamm_conif = float(np.clip(self.cfg.flamm_conif, 0.0, 5.0))
+        flamm = np.zeros(g.shape, dtype=np.float32)
+        flamm[decid] = flamm_decid
+        flamm[conif] = flamm_conif
+
+        # Rule 2 (Moore + wind + humidity + vegetation, без wrap-around)
+        ignite_from_neighbors = np.zeros_like(is_tree, dtype=bool)
 
         for dx, dy in self._DIRS:
             src_burning = self._shift_no_wrap(burning, dx, dy)
-            candidates = tree & src_burning
+            candidates = is_tree & src_burning
             if not candidates.any():
                 continue
 
             p_wind = self._spread_prob(dx, dy)
-            p_eff = p_wind * dryness  # <- вологість зменшує поширення
 
-            if p_eff >= 1.0:
-                ignite_from_neighbors |= candidates
-            elif p_eff > 0.0:
-                ignite_from_neighbors |= candidates & (self.rng.random(g.shape) < p_eff)
+            # тепер це матриця, бо різні типи дерев мають різну займистість
+            p_eff = np.clip(p_wind * dryness * flamm, 0.0, 1.0).astype(np.float32)
 
-        # Rule 3 (lightning, Variant C) + humidity
-        f_eff = (self.cfg.f if self.cfg.lightning_enabled else 0.0) * dryness
+            ignite_from_neighbors |= candidates & (self.rng.random(g.shape) < p_eff)
+
+        # Rule 3 (lightning, Variant C) + humidity + vegetation
+        f_base = self.cfg.f if self.cfg.lightning_enabled else 0.0
+        f_eff = float(np.clip(f_base * dryness, 0.0, 1.0))
+
         if f_eff > 0.0:
-            lightning = self.rng.random(g.shape) < f_eff
+            # теж множимо на flamm конкретного дерева
+            p_light = np.clip(f_eff * flamm, 0.0, 1.0).astype(np.float32)
+            lightning = self.rng.random(g.shape) < p_light
         else:
-            lightning = np.zeros_like(tree, dtype=bool)
+            lightning = np.zeros_like(is_tree, dtype=bool)
 
-        ignite = ignite_from_neighbors | (tree & lightning)
+        ignite = ignite_from_neighbors | (is_tree & lightning)
 
-        # Rule 1 (growth) + humidity (NEW)
-        # p_eff = p * (0.5 + humidity): в посуху рост гірший, у вологу — кращий
+        # Rule 1 (growth) + humidity
         p_eff = float(np.clip(self.cfg.p * (0.5 + humidity), 0.0, 1.0))
         grow = empty & (self.rng.random(g.shape) < p_eff)
 
+        # Для нових дерев одразу обираємо тип (NEW)
+        conif_ratio = float(np.clip(self.cfg.conifer_ratio, 0.0, 1.0))
+        grow_conif = grow & (self.rng.random(g.shape) < conif_ratio)
+        grow_decid = grow & ~grow_conif
+
         # Rule 4 (burning -> empty)
         next_g = np.full(g.shape, EMPTY, dtype=np.uint8)
-        next_g[tree & ~ignite] = TREE
-        next_g[grow] = TREE
+
+        # зберігаємо дерева, що не загорілись
+        next_g[decid & ~ignite] = TREE_DECID
+        next_g[conif & ~ignite] = TREE_CONIF
+
+        # виростання
+        next_g[grow_decid] = TREE_DECID
+        next_g[grow_conif] = TREE_CONIF
+
+        # займання
         next_g[ignite] = BURNING
 
         self.grid = next_g

@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QSpinBox
 )
 
-from src.app.core.ca import ForestFireCA, CAConfig, EMPTY, TREE, BURNING
+from src.app.core.ca import ForestFireCA, CAConfig, EMPTY, TREE_DECID, TREE_CONIF, BURNING
 from src.app.ui.grid_widget import GridWidget
 
 
@@ -216,7 +216,7 @@ class MainWindow(QMainWindow):
         self.ca.ignite(row, col)
         self.grid_widget.set_grid(self.ca.grid)
 
-        if before != TREE:
+        if int(before) not in (TREE_DECID, TREE_CONIF):
             self.statusBar().showMessage("Підпал можливий тільки на клітинках з деревом", 2000)
 
     def on_tick(self):

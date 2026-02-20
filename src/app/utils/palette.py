@@ -1,10 +1,15 @@
 import numpy as np
 
-EMPTY, TREE, BURNING = 0, 1, 2
+EMPTY = 0
+TREE_DECID = 1
+TREE_CONIF = 2
+BURNING = 3
 
-# Можеш змінити на свої кольори; головне — uint8
+# uint8, щоб швидко індексувалося PALETTE[grid]
 PALETTE = np.array([
-    [15, 15, 15],      # EMPTY
-    [34, 139, 34],     # TREE
-    [255, 69, 0],      # BURNING
+    [15, 15, 15],       # EMPTY
+    [46, 160, 67],      # TREE_DECID (листяні) - світліше зелений
+    [20, 110, 55],      # TREE_CONIF (хвойні)  - темніше зелений
+    [255, 69, 0],       # BURNING
 ], dtype=np.uint8)
+
