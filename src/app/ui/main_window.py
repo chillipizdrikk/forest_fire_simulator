@@ -38,14 +38,18 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Forest Fire CA Simulator (Moore)")
 
-        # тільки Moore, без neighborhood
         self.cfg = CAConfig(
             width=20,
             height=20,
             p=0.01,
             f=0.001,
             lightning_enabled=True,
-            humidity=0.20,   # стартова вологість (NEW)
+            humidity=0.20,
+
+            # NEW vegetation defaults
+            conifer_ratio=0.50,
+            flamm_decid=0.85,
+            flamm_conif=1.00,
         )
         self.ca = ForestFireCA(self.cfg)
 
@@ -70,7 +74,7 @@ class MainWindow(QMainWindow):
         self.btn_start = QPushButton("Start")
         self.btn_pause = QPushButton("Pause")
         self.btn_step = QPushButton("Step")
-        self.btn_reset = QPushButton("Reset")
+        self.btn_reset = QPushButton("Reset (regen forest)")
         btn_row.addWidget(self.btn_start)
         btn_row.addWidget(self.btn_pause)
         btn_row.addWidget(self.btn_step)
@@ -119,7 +123,7 @@ class MainWindow(QMainWindow):
         self.cmb_wind.setEnabled(self.cfg.wind_enabled)
         self.wind_slider.setEnabled(self.cfg.wind_enabled)
 
-        # Humidity (NEW)
+        # Humidity
         hum_row = QWidget()
         hum_l = QHBoxLayout(hum_row)
         hum_l.setContentsMargins(0, 0, 0, 0)
@@ -130,6 +134,31 @@ class MainWindow(QMainWindow):
         hum_l.addWidget(self.hum_lab, 1)
         hum_l.addWidget(self.hum_slider, 4)
         panel_l.addWidget(hum_row)
+
+        # --- Vegetation (NEW) ---
+        panel_l.addWidget(QLabel("Vegetation:"))
+
+        # Conifer ratio 0..1
+        conif_row = QWidget()
+        conif_l = QHBoxLayout(conif_row)
+        conif_l.setContentsMargins(0, 0, 0, 0)
+        self.conif_lab = QLabel(f"Conifer ratio: {self.cfg.conifer_ratio:.2f}")
+        self.conif_slider = QSlider(Qt.Horizontal)
+        self.conif_slider.setRange(0, 100)
+        self.conif_slider.setValue(int(self.cfg.conifer_ratio * 100))
+        conif_l.addWidget(self.conif_lab, 1)
+        conif_l.addWidget(self.conif_slider, 4)
+        panel_l.addWidget(conif_row)
+
+        # Flammability sliders (0..2)
+        d_row, self.flamm_d_lab, self.flamm_d_slider, self.flamm_d_to_float = slider_float(
+            "Flammability (decid)", 0.0, 2.0, self.cfg.flamm_decid
+        )
+        c_row, self.flamm_c_lab, self.flamm_c_slider, self.flamm_c_to_float = slider_float(
+            "Flammability (conif)", 0.0, 2.0, self.cfg.flamm_conif
+        )
+        panel_l.addWidget(d_row)
+        panel_l.addWidget(c_row)
 
         # Lightning (Variant C)
         self.chk_lightning = QCheckBox("Lightning enabled (random ignition)")
@@ -180,7 +209,12 @@ class MainWindow(QMainWindow):
         self.cmb_wind.currentTextChanged.connect(self.on_wind_dir_changed)
         self.wind_slider.valueChanged.connect(self.on_wind_strength_changed)
 
-        self.hum_slider.valueChanged.connect(self.on_humidity_changed)  # NEW
+        self.hum_slider.valueChanged.connect(self.on_humidity_changed)
+
+        # Vegetation signals
+        self.conif_slider.valueChanged.connect(self.on_conifer_ratio_changed)
+        self.flamm_d_slider.valueChanged.connect(self.on_flammability_changed)
+        self.flamm_c_slider.valueChanged.connect(self.on_flammability_changed)
 
         self.grid_widget.cell_clicked.connect(self.on_cell_clicked)
 
@@ -254,6 +288,17 @@ class MainWindow(QMainWindow):
     def on_humidity_changed(self, v: int):
         self.cfg.humidity = v / 100.0
         self.hum_lab.setText(f"Humidity: {self.cfg.humidity:.2f}")
+
+    def on_conifer_ratio_changed(self, v: int):
+        self.cfg.conifer_ratio = v / 100.0
+        self.conif_lab.setText(f"Conifer ratio: {self.cfg.conifer_ratio:.2f}")
+        self.statusBar().showMessage("Conifer ratio впливає на новий ріст і на Reset (regen forest).", 2000)
+
+    def on_flammability_changed(self):
+        self.cfg.flamm_decid = float(self.flamm_d_to_float(self.flamm_d_slider.value()))
+        self.cfg.flamm_conif = float(self.flamm_c_to_float(self.flamm_c_slider.value()))
+        self.flamm_d_lab.setText(f"Flammability (decid): {self.cfg.flamm_decid:.4f}")
+        self.flamm_c_lab.setText(f"Flammability (conif): {self.cfg.flamm_conif:.4f}")
 
     def _update_f_label_and_state(self):
         self.f_slider.setEnabled(self.cfg.lightning_enabled)
