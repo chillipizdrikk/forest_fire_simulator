@@ -6,7 +6,5 @@ PALETTE = np.array([
     [46, 160, 67],      # TREE_DECID
     [20, 110, 55],      # TREE_CONIF
     [255, 69, 0],       # BURNING
-    [160, 160, 160],    # BARRIER (сірий)
+    [160, 160, 160],    # BARRIER
 ], dtype=np.uint8)
-
-
