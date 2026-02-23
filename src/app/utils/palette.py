@@ -1,10 +1,10 @@
 import numpy as np
 
-EMPTY, TREE, BURNING = 0, 1, 2
-
-# Можеш змінити на свої кольори; головне — uint8
+# 0..4: EMPTY, TREE_DECID, TREE_CONIF, BURNING, BARRIER
 PALETTE = np.array([
-    [15, 15, 15],      # EMPTY
-    [34, 139, 34],     # TREE
-    [255, 69, 0],      # BURNING
+    [15, 15, 15],       # EMPTY
+    [46, 160, 67],      # TREE_DECID
+    [20, 110, 55],      # TREE_CONIF
+    [255, 69, 0],       # BURNING
+    [160, 160, 160],    # BARRIER
 ], dtype=np.uint8)

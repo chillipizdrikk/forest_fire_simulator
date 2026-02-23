@@ -6,7 +6,10 @@ from PySide6.QtWidgets import (
     QCheckBox, QSpinBox
 )
 
-from src.app.core.ca import ForestFireCA, CAConfig, EMPTY, TREE, BURNING
+from src.app.core.ca import (
+    ForestFireCA, CAConfig,
+    EMPTY, TREE_DECID, TREE_CONIF, BURNING, BARRIER
+)
 from src.app.ui.grid_widget import GridWidget
 
 
@@ -38,14 +41,16 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Forest Fire CA Simulator (Moore)")
 
-        # тільки Moore, без neighborhood
         self.cfg = CAConfig(
             width=20,
             height=20,
             p=0.01,
             f=0.001,
             lightning_enabled=True,
-            humidity=0.20,   # стартова вологість (NEW)
+            humidity=0.20,
+            conifer_ratio=0.50,
+            flamm_decid=0.85,
+            flamm_conif=1.00,
         )
         self.ca = ForestFireCA(self.cfg)
 
@@ -62,15 +67,22 @@ class MainWindow(QMainWindow):
         panel_l = QVBoxLayout(panel)
         root.addWidget(panel, 2)
 
-        panel_l.addWidget(QLabel("Tip: Left-click on the grid to ignite a cell"))
-        panel_l.addWidget(QLabel("Neighborhood: Moore (8-neighbor)"))
+        panel_l.addWidget(QLabel("Left-drag: tool | Right-drag: Erase"))
+        panel_l.addWidget(QLabel("Edit рекомендовано робити на Pause."))
+
+        # Tool selector (NEW)
+        panel_l.addWidget(QLabel("Tool:"))
+        self.tool_combo = QComboBox()
+        self.tool_combo.addItems(["Ignite", "Plant decid", "Plant conif", "Barrier", "Erase"])
+        self.tool_combo.setCurrentText("Ignite")
+        panel_l.addWidget(self.tool_combo)
 
         # Buttons
         btn_row = QHBoxLayout()
         self.btn_start = QPushButton("Start")
         self.btn_pause = QPushButton("Pause")
         self.btn_step = QPushButton("Step")
-        self.btn_reset = QPushButton("Reset")
+        self.btn_reset = QPushButton("Reset (regen forest)")
         btn_row.addWidget(self.btn_start)
         btn_row.addWidget(self.btn_pause)
         btn_row.addWidget(self.btn_step)
@@ -119,7 +131,7 @@ class MainWindow(QMainWindow):
         self.cmb_wind.setEnabled(self.cfg.wind_enabled)
         self.wind_slider.setEnabled(self.cfg.wind_enabled)
 
-        # Humidity (NEW)
+        # Humidity
         hum_row = QWidget()
         hum_l = QHBoxLayout(hum_row)
         hum_l.setContentsMargins(0, 0, 0, 0)
@@ -131,7 +143,30 @@ class MainWindow(QMainWindow):
         hum_l.addWidget(self.hum_slider, 4)
         panel_l.addWidget(hum_row)
 
-        # Lightning (Variant C)
+        # Vegetation
+        panel_l.addWidget(QLabel("Vegetation:"))
+
+        conif_row = QWidget()
+        conif_l = QHBoxLayout(conif_row)
+        conif_l.setContentsMargins(0, 0, 0, 0)
+        self.conif_lab = QLabel(f"Conifer ratio: {self.cfg.conifer_ratio:.2f}")
+        self.conif_slider = QSlider(Qt.Horizontal)
+        self.conif_slider.setRange(0, 100)
+        self.conif_slider.setValue(int(self.cfg.conifer_ratio * 100))
+        conif_l.addWidget(self.conif_lab, 1)
+        conif_l.addWidget(self.conif_slider, 4)
+        panel_l.addWidget(conif_row)
+
+        d_row, self.flamm_d_lab, self.flamm_d_slider, self.flamm_d_to_float = slider_float(
+            "Flammability (decid)", 0.0, 2.0, self.cfg.flamm_decid
+        )
+        c_row, self.flamm_c_lab, self.flamm_c_slider, self.flamm_c_to_float = slider_float(
+            "Flammability (conif)", 0.0, 2.0, self.cfg.flamm_conif
+        )
+        panel_l.addWidget(d_row)
+        panel_l.addWidget(c_row)
+
+        # Lightning
         self.chk_lightning = QCheckBox("Lightning enabled (random ignition)")
         self.chk_lightning.setChecked(self.cfg.lightning_enabled)
         panel_l.addWidget(self.chk_lightning)
@@ -180,13 +215,20 @@ class MainWindow(QMainWindow):
         self.cmb_wind.currentTextChanged.connect(self.on_wind_dir_changed)
         self.wind_slider.valueChanged.connect(self.on_wind_strength_changed)
 
-        self.hum_slider.valueChanged.connect(self.on_humidity_changed)  # NEW
+        self.hum_slider.valueChanged.connect(self.on_humidity_changed)
 
-        self.grid_widget.cell_clicked.connect(self.on_cell_clicked)
+        self.conif_slider.valueChanged.connect(self.on_conifer_ratio_changed)
+        self.flamm_d_slider.valueChanged.connect(self.on_flammability_changed)
+        self.flamm_c_slider.valueChanged.connect(self.on_flammability_changed)
+
+        # NEW: painting signal
+        self.grid_widget.cell_painted.connect(self.on_cell_painted)
 
         # First render
         self.grid_widget.set_grid(self.ca.grid)
         self._update_f_label_and_state()
+
+    # ---- Simulation controls ----
 
     def on_start(self):
         self.timer.start(self.speed_slider.value())
@@ -211,18 +253,41 @@ class MainWindow(QMainWindow):
         self.grid_widget.set_grid(self.ca.grid)
         self.stats.setText(f"Step: {self.ca.step_count}")
 
-    def on_cell_clicked(self, row: int, col: int):
-        before = self.ca.grid[row, col]
-        self.ca.ignite(row, col)
-        self.grid_widget.set_grid(self.ca.grid)
-
-        if before != TREE:
-            self.statusBar().showMessage("Підпал можливий тільки на клітинках з деревом", 2000)
-
     def on_tick(self):
         self.ca.step()
         self.grid_widget.set_grid(self.ca.grid)
         self.stats.setText(f"Step: {self.ca.step_count}")
+
+    # ---- Painting / tools ----
+
+    def on_cell_painted(self, row: int, col: int, button: int):
+        # Редагування краще робити на паузі
+        if self.timer.isActive():
+            self.statusBar().showMessage("Натисни Pause, щоб редагувати карту.", 1200)
+            return
+
+        # Right-drag always erase
+        if button == Qt.RightButton.value:
+            self.ca.set_empty(row, col)
+            self.grid_widget.set_grid(self.ca.grid)
+            return
+
+        tool = self.tool_combo.currentText()
+
+        if tool == "Ignite":
+            self.ca.ignite(row, col)
+        elif tool == "Plant decid":
+            self.ca.plant_decid(row, col)
+        elif tool == "Plant conif":
+            self.ca.plant_conif(row, col)
+        elif tool == "Barrier":
+            self.ca.set_barrier(row, col, True)
+        elif tool == "Erase":
+            self.ca.set_empty(row, col)
+
+        self.grid_widget.set_grid(self.ca.grid)
+
+    # ---- Params ----
 
     def on_params_changed(self):
         self.cfg.p = float(self.p_to_float(self.p_slider.value()))
@@ -254,6 +319,16 @@ class MainWindow(QMainWindow):
     def on_humidity_changed(self, v: int):
         self.cfg.humidity = v / 100.0
         self.hum_lab.setText(f"Humidity: {self.cfg.humidity:.2f}")
+
+    def on_conifer_ratio_changed(self, v: int):
+        self.cfg.conifer_ratio = v / 100.0
+        self.conif_lab.setText(f"Conifer ratio: {self.cfg.conifer_ratio:.2f}")
+
+    def on_flammability_changed(self):
+        self.cfg.flamm_decid = float(self.flamm_d_to_float(self.flamm_d_slider.value()))
+        self.cfg.flamm_conif = float(self.flamm_c_to_float(self.flamm_c_slider.value()))
+        self.flamm_d_lab.setText(f"Flammability (decid): {self.cfg.flamm_decid:.4f}")
+        self.flamm_c_lab.setText(f"Flammability (conif): {self.cfg.flamm_conif:.4f}")
 
     def _update_f_label_and_state(self):
         self.f_slider.setEnabled(self.cfg.lightning_enabled)
