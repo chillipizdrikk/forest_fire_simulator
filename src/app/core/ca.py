@@ -7,7 +7,7 @@ EMPTY = 0
 TREE_DECID = 1   # листяні
 TREE_CONIF = 2   # хвойні
 BURNING = 3
-BARRIER = 4      # NEW: бар’єр (дорога/вода/мінералізована смуга)
+BARRIER = 4      # бар’єр
 
 TREE_STATES = (TREE_DECID, TREE_CONIF)
 
@@ -81,20 +81,48 @@ class ForestFireCA:
         self.grid = self._make_initial_grid()
         self.step_count = 0
 
+    # ----------- Editing tools (NEW) -----------
+
+    def set_empty(self, row: int, col: int):
+        if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
+            self.grid[row, col] = EMPTY
+
+    def set_barrier(self, row: int, col: int, enabled: bool = True):
+        """Ставимо/знімаємо бар’єр. Не ставимо поверх BURNING."""
+        if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
+            if enabled:
+                if int(self.grid[row, col]) != BURNING:
+                    self.grid[row, col] = BARRIER
+            else:
+                if int(self.grid[row, col]) == BARRIER:
+                    self.grid[row, col] = EMPTY
+
+    def plant_decid(self, row: int, col: int):
+        if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
+            if int(self.grid[row, col]) != BURNING:
+                self.grid[row, col] = TREE_DECID
+
+    def plant_conif(self, row: int, col: int):
+        if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
+            if int(self.grid[row, col]) != BURNING:
+                self.grid[row, col] = TREE_CONIF
+
     def ignite(self, row: int, col: int):
         """Підпал тільки на деревах."""
         if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
             if int(self.grid[row, col]) in TREE_STATES:
                 self.grid[row, col] = BURNING
 
+    # (залишив для сумісності, якщо десь ще використовувалось)
     def toggle_barrier(self, row: int, col: int):
-        """Правий клік: ставимо/знімаємо бар’єр. Не ставимо поверх BURNING."""
         if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
             v = int(self.grid[row, col])
             if v == BARRIER:
                 self.grid[row, col] = EMPTY
             elif v != BURNING:
                 self.grid[row, col] = BARRIER
+
+    # ----------- Simulation internals -----------
 
     def _shift_no_wrap(self, mask: np.ndarray, dx: int, dy: int) -> np.ndarray:
         h, w = mask.shape
@@ -154,7 +182,7 @@ class ForestFireCA:
             p_eff = np.clip(p_wind * dryness * flamm, 0.0, 1.0).astype(np.float32)
             ignite_from_neighbors |= candidates & (self.rng.random(g.shape) < p_eff)
 
-        # Rule 3: lightning (also affected by humidity + vegetation)
+        # Rule 3: lightning (affected by humidity + vegetation)
         f_base = self.cfg.f if self.cfg.lightning_enabled else 0.0
         f_eff = float(np.clip(f_base * dryness, 0.0, 1.0))
         if f_eff > 0.0:
@@ -183,11 +211,11 @@ class ForestFireCA:
         next_g[decid & ~ignite] = TREE_DECID
         next_g[conif & ~ignite] = TREE_CONIF
 
-        # Growth (only on empty, so won't overwrite barriers)
+        # Growth
         next_g[grow_decid] = TREE_DECID
         next_g[grow_conif] = TREE_CONIF
 
-        # Ignitions -> burning (won't affect barriers, since ignite only for trees)
+        # Ignitions -> burning
         next_g[ignite] = BURNING
 
         self.grid = next_g
