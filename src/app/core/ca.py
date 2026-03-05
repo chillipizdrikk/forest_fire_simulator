@@ -24,6 +24,9 @@ class CAConfig:
     # Humidity: 0.0 = сухо, 1.0 = волого
     humidity: float = 0.0
 
+    # Temperature (NEW): °C
+    temperature_c: float = 25.0     # рекомендований діапазон: -10..40
+
     # Wind
     wind_enabled: bool = False
     wind_dir: str = "E"
@@ -57,6 +60,10 @@ class ForestFireCA:
         "NW": (-1, -1),
     }
 
+    # Температурний діапазон для нормалізації (можеш змінити під диплом)
+    _T_MIN = -10.0
+    _T_MAX = 40.0
+
     def __init__(self, cfg: CAConfig):
         self.cfg = cfg
         self.rng = np.random.default_rng(cfg.seed)
@@ -81,7 +88,7 @@ class ForestFireCA:
         self.grid = self._make_initial_grid()
         self.step_count = 0
 
-    # ----------- Editing tools (NEW) -----------
+    # ----------- Editing tools -----------
 
     def set_empty(self, row: int, col: int):
         if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
@@ -113,15 +120,6 @@ class ForestFireCA:
             if int(self.grid[row, col]) in TREE_STATES:
                 self.grid[row, col] = BURNING
 
-    # (залишив для сумісності, якщо десь ще використовувалось)
-    def toggle_barrier(self, row: int, col: int):
-        if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
-            v = int(self.grid[row, col])
-            if v == BARRIER:
-                self.grid[row, col] = EMPTY
-            elif v != BURNING:
-                self.grid[row, col] = BARRIER
-
     # ----------- Simulation internals -----------
 
     def _shift_no_wrap(self, mask: np.ndarray, dx: int, dy: int) -> np.ndarray:
@@ -152,6 +150,11 @@ class ForestFireCA:
         p = 1.0 - s * (1.0 - dot) / 2.0
         return float(np.clip(p, 0.0, 1.0))
 
+    def _temp_norm(self) -> float:
+        """Нормалізована температура в [0..1] за діапазоном _T_MIN.._T_MAX."""
+        t = float(self.cfg.temperature_c)
+        return float(np.clip((t - self._T_MIN) / (self._T_MAX - self._T_MIN), 0.0, 1.0))
+
     def step(self):
         g = self.grid
 
@@ -162,15 +165,22 @@ class ForestFireCA:
         empty = (g == EMPTY)
         barrier = (g == BARRIER)
 
+        # Humidity -> base dryness
         humidity = float(np.clip(self.cfg.humidity, 0.0, 1.0))
         dryness = 1.0 - humidity
+
+        # Temperature -> dryness multiplier (NEW)
+        # t_norm: 0 (cold) -> factor 0.5, 1 (hot) -> factor 1.5
+        t_norm = self._temp_norm()
+        temp_factor = 0.5 + t_norm
+        dryness_eff = float(np.clip(dryness * temp_factor, 0.0, 1.0))
 
         # Flammability per cell
         flamm = np.zeros(g.shape, dtype=np.float32)
         flamm[decid] = float(np.clip(self.cfg.flamm_decid, 0.0, 5.0))
         flamm[conif] = float(np.clip(self.cfg.flamm_conif, 0.0, 5.0))
 
-        # Rule 2: ignite from neighbors (wind + humidity + vegetation)
+        # Rule 2: ignite from neighbors (wind + humidity + temperature + vegetation)
         ignite_from_neighbors = np.zeros_like(is_tree, dtype=bool)
         for dx, dy in self._DIRS:
             src_burning = self._shift_no_wrap(burning, dx, dy)
@@ -179,12 +189,12 @@ class ForestFireCA:
                 continue
 
             p_wind = self._spread_prob_wind(dx, dy)
-            p_eff = np.clip(p_wind * dryness * flamm, 0.0, 1.0).astype(np.float32)
+            p_eff = np.clip(p_wind * dryness_eff * flamm, 0.0, 1.0).astype(np.float32)
             ignite_from_neighbors |= candidates & (self.rng.random(g.shape) < p_eff)
 
-        # Rule 3: lightning (affected by humidity + vegetation)
+        # Rule 3: lightning (also affected by humidity + temperature + vegetation)
         f_base = self.cfg.f if self.cfg.lightning_enabled else 0.0
-        f_eff = float(np.clip(f_base * dryness, 0.0, 1.0))
+        f_eff = float(np.clip(f_base * dryness_eff, 0.0, 1.0))
         if f_eff > 0.0:
             p_light = np.clip(f_eff * flamm, 0.0, 1.0).astype(np.float32)
             ignite_lightning = is_tree & (self.rng.random(g.shape) < p_light)
@@ -193,8 +203,10 @@ class ForestFireCA:
 
         ignite = ignite_from_neighbors | ignite_lightning
 
-        # Rule 1: growth (humidity affects growth), but NOT on barriers
-        p_eff = float(np.clip(self.cfg.p * (0.5 + humidity), 0.0, 1.0))
+        # Rule 1: growth (humidity helps; high temperature трохи зменшує ріст)
+        # growth_factor: cold -> ~1.15, hot -> ~0.85 (м’який ефект)
+        growth_factor = float(np.clip(1.15 - 0.30 * t_norm, 0.6, 1.4))
+        p_eff = float(np.clip(self.cfg.p * (0.5 + humidity) * growth_factor, 0.0, 1.0))
         grow = empty & (self.rng.random(g.shape) < p_eff)
 
         conif_ratio = float(np.clip(self.cfg.conifer_ratio, 0.0, 1.0))
