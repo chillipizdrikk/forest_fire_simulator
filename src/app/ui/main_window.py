@@ -48,6 +48,7 @@ class MainWindow(QMainWindow):
             f=0.001,
             lightning_enabled=True,
             humidity=0.20,
+            temperature_c=25.0,   # NEW
             conifer_ratio=0.50,
             flamm_decid=0.85,
             flamm_conif=1.00,
@@ -70,7 +71,7 @@ class MainWindow(QMainWindow):
         panel_l.addWidget(QLabel("Left-drag: tool | Right-drag: Erase"))
         panel_l.addWidget(QLabel("Edit рекомендовано робити на Pause."))
 
-        # Tool selector (NEW)
+        # Tool selector
         panel_l.addWidget(QLabel("Tool:"))
         self.tool_combo = QComboBox()
         self.tool_combo.addItems(["Ignite", "Plant decid", "Plant conif", "Barrier", "Erase"])
@@ -142,6 +143,18 @@ class MainWindow(QMainWindow):
         hum_l.addWidget(self.hum_lab, 1)
         hum_l.addWidget(self.hum_slider, 4)
         panel_l.addWidget(hum_row)
+
+        # Temperature (NEW)  [-10..40] °C
+        temp_row = QWidget()
+        temp_l = QHBoxLayout(temp_row)
+        temp_l.setContentsMargins(0, 0, 0, 0)
+        self.temp_lab = QLabel(f"Temperature: {self.cfg.temperature_c:.0f} °C")
+        self.temp_slider = QSlider(Qt.Horizontal)
+        self.temp_slider.setRange(-10, 40)
+        self.temp_slider.setValue(int(self.cfg.temperature_c))
+        temp_l.addWidget(self.temp_lab, 1)
+        temp_l.addWidget(self.temp_slider, 4)
+        panel_l.addWidget(temp_row)
 
         # Vegetation
         panel_l.addWidget(QLabel("Vegetation:"))
@@ -216,12 +229,12 @@ class MainWindow(QMainWindow):
         self.wind_slider.valueChanged.connect(self.on_wind_strength_changed)
 
         self.hum_slider.valueChanged.connect(self.on_humidity_changed)
+        self.temp_slider.valueChanged.connect(self.on_temperature_changed)  # NEW
 
         self.conif_slider.valueChanged.connect(self.on_conifer_ratio_changed)
         self.flamm_d_slider.valueChanged.connect(self.on_flammability_changed)
         self.flamm_c_slider.valueChanged.connect(self.on_flammability_changed)
 
-        # NEW: painting signal
         self.grid_widget.cell_painted.connect(self.on_cell_painted)
 
         # First render
@@ -261,12 +274,10 @@ class MainWindow(QMainWindow):
     # ---- Painting / tools ----
 
     def on_cell_painted(self, row: int, col: int, button: int):
-        # Редагування краще робити на паузі
         if self.timer.isActive():
             self.statusBar().showMessage("Натисни Pause, щоб редагувати карту.", 1200)
             return
 
-        # Right-drag always erase
         if button == Qt.RightButton.value:
             self.ca.set_empty(row, col)
             self.grid_widget.set_grid(self.ca.grid)
@@ -319,6 +330,10 @@ class MainWindow(QMainWindow):
     def on_humidity_changed(self, v: int):
         self.cfg.humidity = v / 100.0
         self.hum_lab.setText(f"Humidity: {self.cfg.humidity:.2f}")
+
+    def on_temperature_changed(self, v: int):
+        self.cfg.temperature_c = float(v)
+        self.temp_lab.setText(f"Temperature: {v} °C")
 
     def on_conifer_ratio_changed(self, v: int):
         self.cfg.conifer_ratio = v / 100.0
