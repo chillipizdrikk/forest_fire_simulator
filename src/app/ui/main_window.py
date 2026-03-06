@@ -241,6 +241,13 @@ class MainWindow(QMainWindow):
     # ---- Simulation controls ----
 
     def on_start(self):
+        if not self.ca.has_active_fire() and not self.cfg.lightning_enabled:
+            self.statusBar().showMessage(
+                "Симуляція не може бути запущена: немає активного займання і блискавка вимкнена.",
+                2500
+            )
+            return
+
         self.timer.start(self.speed_slider.value())
 
     def on_pause(self):
@@ -267,6 +274,13 @@ class MainWindow(QMainWindow):
         self.ca.step()
         self.grid_widget.set_grid(self.ca.grid)
         self.stats.setText(f"Step: {self.ca.step_count}")
+
+        # Автозупинка:
+        # якщо активного вогню більше немає і блискавка вимкнена,
+        # то подальші кроки нічого не змінять
+        if not self.ca.has_active_fire() and not self.cfg.lightning_enabled:
+            self.timer.stop()
+            self.statusBar().showMessage("Симуляцію завершено: активне горіння відсутнє.", 2500)
 
     # ---- Painting / tools ----
 
