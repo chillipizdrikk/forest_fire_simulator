@@ -8,6 +8,7 @@ TREE_DECID = 1   # листяні
 TREE_CONIF = 2   # хвойні
 BURNING = 3
 BARRIER = 4      # бар’єр
+BURNT = 5        # NEW: згоріла клітинка
 
 TREE_STATES = (TREE_DECID, TREE_CONIF)
 
@@ -17,14 +18,13 @@ class CAConfig:
     width: int = 200
     height: int = 200
 
-    p: float = 0.01                 # ріст (базовий)
     f: float = 0.001                # блискавка
     lightning_enabled: bool = True  # Variant C
 
     # Humidity: 0.0 = сухо, 1.0 = волого
     humidity: float = 0.0
 
-    # Temperature (NEW): °C
+    # Temperature: °C
     temperature_c: float = 25.0     # рекомендований діапазон: -10..40
 
     # Wind
@@ -60,7 +60,6 @@ class ForestFireCA:
         "NW": (-1, -1),
     }
 
-    # Температурний діапазон для нормалізації (можеш змінити під диплом)
     _T_MIN = -10.0
     _T_MAX = 40.0
 
@@ -106,12 +105,12 @@ class ForestFireCA:
 
     def plant_decid(self, row: int, col: int):
         if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
-            if int(self.grid[row, col]) != BURNING:
+            if int(self.grid[row, col]) not in (BURNING, BARRIER):
                 self.grid[row, col] = TREE_DECID
 
     def plant_conif(self, row: int, col: int):
         if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
-            if int(self.grid[row, col]) != BURNING:
+            if int(self.grid[row, col]) not in (BURNING, BARRIER):
                 self.grid[row, col] = TREE_CONIF
 
     def ignite(self, row: int, col: int):
@@ -151,7 +150,6 @@ class ForestFireCA:
         return float(np.clip(p, 0.0, 1.0))
 
     def _temp_norm(self) -> float:
-        """Нормалізована температура в [0..1] за діапазоном _T_MIN.._T_MAX."""
         t = float(self.cfg.temperature_c)
         return float(np.clip((t - self._T_MIN) / (self._T_MAX - self._T_MIN), 0.0, 1.0))
 
@@ -162,15 +160,14 @@ class ForestFireCA:
         decid = (g == TREE_DECID)
         conif = (g == TREE_CONIF)
         is_tree = decid | conif
-        empty = (g == EMPTY)
         barrier = (g == BARRIER)
+        burnt = (g == BURNT)
 
         # Humidity -> base dryness
         humidity = float(np.clip(self.cfg.humidity, 0.0, 1.0))
         dryness = 1.0 - humidity
 
-        # Temperature -> dryness multiplier (NEW)
-        # t_norm: 0 (cold) -> factor 0.5, 1 (hot) -> factor 1.5
+        # Temperature -> dryness multiplier
         t_norm = self._temp_norm()
         temp_factor = 0.5 + t_norm
         dryness_eff = float(np.clip(dryness * temp_factor, 0.0, 1.0))
@@ -180,7 +177,7 @@ class ForestFireCA:
         flamm[decid] = float(np.clip(self.cfg.flamm_decid, 0.0, 5.0))
         flamm[conif] = float(np.clip(self.cfg.flamm_conif, 0.0, 5.0))
 
-        # Rule 2: ignite from neighbors (wind + humidity + temperature + vegetation)
+        # Rule 2: ignite from neighbors
         ignite_from_neighbors = np.zeros_like(is_tree, dtype=bool)
         for dx, dy in self._DIRS:
             src_burning = self._shift_no_wrap(burning, dx, dy)
@@ -192,7 +189,7 @@ class ForestFireCA:
             p_eff = np.clip(p_wind * dryness_eff * flamm, 0.0, 1.0).astype(np.float32)
             ignite_from_neighbors |= candidates & (self.rng.random(g.shape) < p_eff)
 
-        # Rule 3: lightning (also affected by humidity + temperature + vegetation)
+        # Rule 3: lightning
         f_base = self.cfg.f if self.cfg.lightning_enabled else 0.0
         f_eff = float(np.clip(f_base * dryness_eff, 0.0, 1.0))
         if f_eff > 0.0:
@@ -203,31 +200,20 @@ class ForestFireCA:
 
         ignite = ignite_from_neighbors | ignite_lightning
 
-        # Rule 1: growth (humidity helps; high temperature трохи зменшує ріст)
-        # growth_factor: cold -> ~1.15, hot -> ~0.85 (м’який ефект)
-        growth_factor = float(np.clip(1.15 - 0.30 * t_norm, 0.6, 1.4))
-        p_eff = float(np.clip(self.cfg.p * (0.5 + humidity) * growth_factor, 0.0, 1.0))
-        grow = empty & (self.rng.random(g.shape) < p_eff)
-
-        conif_ratio = float(np.clip(self.cfg.conifer_ratio, 0.0, 1.0))
-        grow_conif = grow & (self.rng.random(g.shape) < conif_ratio)
-        grow_decid = grow & ~grow_conif
-
         # Build next grid:
         next_g = np.full(g.shape, EMPTY, dtype=np.uint8)
 
-        # Preserve barriers ALWAYS
+        # Бар’єри зберігаються
         next_g[barrier] = BARRIER
 
-        # Trees that didn't ignite keep their type
+        # Згорілі клітини залишаються видимими
+        next_g[burnt] = BURNT        
+        next_g[burning] = BURNT
+        # Дерева, які не загорілися, зберігають тип
         next_g[decid & ~ignite] = TREE_DECID
         next_g[conif & ~ignite] = TREE_CONIF
 
-        # Growth
-        next_g[grow_decid] = TREE_DECID
-        next_g[grow_conif] = TREE_CONIF
-
-        # Ignitions -> burning
+        # Нові займання
         next_g[ignite] = BURNING
 
         self.grid = next_g

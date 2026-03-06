@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
 
 from src.app.core.ca import (
     ForestFireCA, CAConfig,
-    EMPTY, TREE_DECID, TREE_CONIF, BURNING, BARRIER
+    EMPTY, TREE_DECID, TREE_CONIF, BURNING, BARRIER, BURNT
 )
 from src.app.ui.grid_widget import GridWidget
 
@@ -44,11 +44,10 @@ class MainWindow(QMainWindow):
         self.cfg = CAConfig(
             width=20,
             height=20,
-            p=0.01,
             f=0.001,
             lightning_enabled=True,
             humidity=0.20,
-            temperature_c=25.0,   # NEW
+            temperature_c=25.0,
             conifer_ratio=0.50,
             flamm_decid=0.85,
             flamm_conif=1.00,
@@ -70,6 +69,7 @@ class MainWindow(QMainWindow):
 
         panel_l.addWidget(QLabel("Left-drag: tool | Right-drag: Erase"))
         panel_l.addWidget(QLabel("Edit рекомендовано робити на Pause."))
+        panel_l.addWidget(QLabel("Growth during simulation: disabled"))
 
         # Tool selector
         panel_l.addWidget(QLabel("Tool:"))
@@ -83,7 +83,7 @@ class MainWindow(QMainWindow):
         self.btn_start = QPushButton("Start")
         self.btn_pause = QPushButton("Pause")
         self.btn_step = QPushButton("Step")
-        self.btn_reset = QPushButton("Reset (regen forest)")
+        self.btn_reset = QPushButton("Reset map")
         btn_row.addWidget(self.btn_start)
         btn_row.addWidget(self.btn_pause)
         btn_row.addWidget(self.btn_step)
@@ -144,7 +144,7 @@ class MainWindow(QMainWindow):
         hum_l.addWidget(self.hum_slider, 4)
         panel_l.addWidget(hum_row)
 
-        # Temperature (NEW)  [-10..40] °C
+        # Temperature
         temp_row = QWidget()
         temp_l = QHBoxLayout(temp_row)
         temp_l.setContentsMargins(0, 0, 0, 0)
@@ -184,10 +184,8 @@ class MainWindow(QMainWindow):
         self.chk_lightning.setChecked(self.cfg.lightning_enabled)
         panel_l.addWidget(self.chk_lightning)
 
-        # p, f sliders
-        p_row, self.p_lab, self.p_slider, self.p_to_float = slider_float("p (growth)", 0.0, 0.05, self.cfg.p)
+        # f slider only
         f_row, self.f_lab, self.f_slider, self.f_to_float = slider_float("f (lightning)", 0.0, 0.01, self.cfg.f)
-        panel_l.addWidget(p_row)
         panel_l.addWidget(f_row)
 
         # Speed
@@ -218,7 +216,6 @@ class MainWindow(QMainWindow):
         self.btn_reset.clicked.connect(self.on_reset)
         self.btn_apply_size.clicked.connect(self.on_apply_size)
 
-        self.p_slider.valueChanged.connect(self.on_params_changed)
         self.f_slider.valueChanged.connect(self.on_params_changed)
         self.speed_slider.valueChanged.connect(self.on_speed_changed)
 
@@ -229,7 +226,7 @@ class MainWindow(QMainWindow):
         self.wind_slider.valueChanged.connect(self.on_wind_strength_changed)
 
         self.hum_slider.valueChanged.connect(self.on_humidity_changed)
-        self.temp_slider.valueChanged.connect(self.on_temperature_changed)  # NEW
+        self.temp_slider.valueChanged.connect(self.on_temperature_changed)
 
         self.conif_slider.valueChanged.connect(self.on_conifer_ratio_changed)
         self.flamm_d_slider.valueChanged.connect(self.on_flammability_changed)
@@ -301,9 +298,7 @@ class MainWindow(QMainWindow):
     # ---- Params ----
 
     def on_params_changed(self):
-        self.cfg.p = float(self.p_to_float(self.p_slider.value()))
         self.cfg.f = float(self.f_to_float(self.f_slider.value()))
-        self.p_lab.setText(f"p (growth): {self.cfg.p:.4f}")
         self._update_f_label_and_state()
 
     def on_speed_changed(self, v: int):
