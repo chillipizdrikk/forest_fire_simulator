@@ -44,15 +44,25 @@ class MainWindow(QMainWindow):
         self.cfg = CAConfig(
             width=20,
             height=20,
-            f=0.001,
+
+            # Lightning as event
+            f=0.01,
             lightning_enabled=True,
+            lightning_max_strikes_per_event=1,
+            lightning_cooldown_steps=20,
+
             humidity=0.20,
             temperature_c=25.0,
+
             conifer_ratio=0.50,
             flamm_decid=0.85,
             flamm_conif=1.00,
+            burn_stage_factors=(1.00, 0.55, 0.25),
         )
         self.ca = ForestFireCA(self.cfg)
+
+        # Чи вже був хоча б один осередок пожежі в поточному запуску
+        self.run_has_seen_fire = False
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -68,8 +78,7 @@ class MainWindow(QMainWindow):
         root.addWidget(panel, 2)
 
         panel_l.addWidget(QLabel("Left-drag: tool | Right-drag: Erase"))
-        panel_l.addWidget(QLabel("Edit рекомендовано робити на Pause."))
-        panel_l.addWidget(QLabel("Growth during simulation: disabled"))
+        panel_l.addWidget(QLabel("Поточний запуск = один пожежний інцидент."))
 
         # Tool selector
         panel_l.addWidget(QLabel("Tool:"))
@@ -180,13 +189,30 @@ class MainWindow(QMainWindow):
         panel_l.addWidget(c_row)
 
         # Lightning
-        self.chk_lightning = QCheckBox("Lightning enabled (random ignition)")
+        self.chk_lightning = QCheckBox("Lightning enabled")
         self.chk_lightning.setChecked(self.cfg.lightning_enabled)
         panel_l.addWidget(self.chk_lightning)
 
-        # f slider only
-        f_row, self.f_lab, self.f_slider, self.f_to_float = slider_float("f (lightning)", 0.0, 0.01, self.cfg.f)
+        f_row, self.f_lab, self.f_slider, self.f_to_float = slider_float(
+            "Lightning event probability", 0.0, 0.20, self.cfg.f
+        )
         panel_l.addWidget(f_row)
+
+        strikes_row = QHBoxLayout()
+        strikes_row.addWidget(QLabel("Max strikes / event:"))
+        self.strikes_spin = QSpinBox()
+        self.strikes_spin.setRange(1, 20)
+        self.strikes_spin.setValue(self.cfg.lightning_max_strikes_per_event)
+        strikes_row.addWidget(self.strikes_spin)
+        panel_l.addLayout(strikes_row)
+
+        cooldown_row = QHBoxLayout()
+        cooldown_row.addWidget(QLabel("Lightning cooldown steps:"))
+        self.cooldown_spin = QSpinBox()
+        self.cooldown_spin.setRange(0, 500)
+        self.cooldown_spin.setValue(self.cfg.lightning_cooldown_steps)
+        cooldown_row.addWidget(self.cooldown_spin)
+        panel_l.addLayout(cooldown_row)
 
         # Speed
         sp_row = QWidget()
@@ -220,6 +246,8 @@ class MainWindow(QMainWindow):
         self.speed_slider.valueChanged.connect(self.on_speed_changed)
 
         self.chk_lightning.toggled.connect(self.on_lightning_toggled)
+        self.strikes_spin.valueChanged.connect(self.on_lightning_event_params_changed)
+        self.cooldown_spin.valueChanged.connect(self.on_lightning_event_params_changed)
 
         self.chk_wind.toggled.connect(self.on_wind_toggled)
         self.cmb_wind.currentTextChanged.connect(self.on_wind_dir_changed)
@@ -241,9 +269,12 @@ class MainWindow(QMainWindow):
     # ---- Simulation controls ----
 
     def on_start(self):
-        if not self.ca.has_active_fire() and not self.cfg.lightning_enabled:
+        self.run_has_seen_fire = self.ca.has_active_fire()
+
+        # Якщо взагалі немає шансів ні на активний вогонь, ні на блискавку — не стартуємо
+        if not self.ca.has_active_fire() and (not self.cfg.lightning_enabled or self.cfg.f <= 0.0):
             self.statusBar().showMessage(
-                "Симуляція не може бути запущена: немає активного займання і блискавка вимкнена.",
+                "Немає активного займання і блискавка вимкнена.",
                 2500
             )
             return
@@ -259,6 +290,7 @@ class MainWindow(QMainWindow):
     def on_reset(self):
         self.timer.stop()
         self.ca.reset()
+        self.run_has_seen_fire = False
         self.grid_widget.set_grid(self.ca.grid)
         self.stats.setText(f"Step: {self.ca.step_count}")
 
@@ -267,6 +299,7 @@ class MainWindow(QMainWindow):
         self.cfg.width = int(self.w_spin.value())
         self.cfg.height = int(self.h_spin.value())
         self.ca = ForestFireCA(self.cfg)
+        self.run_has_seen_fire = False
         self.grid_widget.set_grid(self.ca.grid)
         self.stats.setText(f"Step: {self.ca.step_count}")
 
@@ -275,12 +308,14 @@ class MainWindow(QMainWindow):
         self.grid_widget.set_grid(self.ca.grid)
         self.stats.setText(f"Step: {self.ca.step_count}")
 
-        # Автозупинка:
-        # якщо активного вогню більше немає і блискавка вимкнена,
-        # то подальші кроки нічого не змінять
-        if not self.ca.has_active_fire() and not self.cfg.lightning_enabled:
+        if self.ca.has_active_fire():
+            self.run_has_seen_fire = True
+
+        # Один запуск = один інцидент:
+        # якщо пожежа вже була і тепер повністю згасла, зупиняємо симуляцію
+        if self.run_has_seen_fire and not self.ca.has_active_fire():
             self.timer.stop()
-            self.statusBar().showMessage("Симуляцію завершено: активне горіння відсутнє.", 2500)
+            self.statusBar().showMessage("Пожежний інцидент завершився.", 2500)
 
     # ---- Painting / tools ----
 
@@ -314,6 +349,10 @@ class MainWindow(QMainWindow):
     def on_params_changed(self):
         self.cfg.f = float(self.f_to_float(self.f_slider.value()))
         self._update_f_label_and_state()
+
+    def on_lightning_event_params_changed(self):
+        self.cfg.lightning_max_strikes_per_event = int(self.strikes_spin.value())
+        self.cfg.lightning_cooldown_steps = int(self.cooldown_spin.value())
 
     def on_speed_changed(self, v: int):
         self.speed_lab.setText(f"Speed (ms): {v}")
@@ -356,6 +395,9 @@ class MainWindow(QMainWindow):
 
     def _update_f_label_and_state(self):
         self.f_slider.setEnabled(self.cfg.lightning_enabled)
+        self.strikes_spin.setEnabled(self.cfg.lightning_enabled)
+        self.cooldown_spin.setEnabled(self.cfg.lightning_enabled)
+
         status = "ON" if self.cfg.lightning_enabled else "OFF"
         eff = self.cfg.f if self.cfg.lightning_enabled else 0.0
-        self.f_lab.setText(f"f (lightning): {self.cfg.f:.4f}  | effective: {eff:.4f} ({status})")
+        self.f_lab.setText(f"Lightning event probability: {self.cfg.f:.4f} | effective: {eff:.4f} ({status})")

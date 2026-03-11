@@ -7,14 +7,14 @@ EMPTY = 0
 TREE_DECID = 1
 TREE_CONIF = 2
 
-BURNING1 = 3  # сильне полум'я
-BURNING2 = 4  # слабше полум'я
-BURNING3 = 5  # тління/жар
+BURNING1 = 3   # найінтенсивніше горіння
+BURNING2 = 4
+BURNING3 = 5
 
 BARRIER = 6
 BURNT = 7
 
-# Для сумісності з твоїм UI (він імпортує BURNING)
+# Для сумісності з UI
 BURNING = BURNING1
 
 TREE_STATES = (TREE_DECID, TREE_CONIF)
@@ -26,8 +26,11 @@ class CAConfig:
     width: int = 200
     height: int = 200
 
-    f: float = 0.001
+    # Lightning as event
+    f: float = 0.01                         # імовірність події блискавки на крок
     lightning_enabled: bool = True
+    lightning_max_strikes_per_event: int = 1
+    lightning_cooldown_steps: int = 20
 
     humidity: float = 0.0
     temperature_c: float = 25.0
@@ -43,7 +46,7 @@ class CAConfig:
     flamm_decid: float = 0.85
     flamm_conif: float = 1.00
 
-    # NEW: коефіцієнти інтенсивності стадій горіння
+    # Стадії горіння: чим пізніша стадія, тим менший вплив на сусідів
     burn_stage_factors: tuple[float, float, float] = (1.00, 0.55, 0.25)
 
 
@@ -67,6 +70,7 @@ class ForestFireCA:
         self.rng = np.random.default_rng(cfg.seed)
         self.grid = self._make_initial_grid()
         self.step_count = 0
+        self._lightning_cooldown = 0
 
     def _make_initial_grid(self) -> np.ndarray:
         cfg = self.cfg
@@ -85,15 +89,24 @@ class ForestFireCA:
     def reset(self):
         self.grid = self._make_initial_grid()
         self.step_count = 0
+        self._lightning_cooldown = 0
 
-    # ----------- Editing tools -----------
+    # ---------- Utility ----------
+
+    def has_active_fire(self) -> bool:
+        return bool(np.any(
+            (self.grid == BURNING1) |
+            (self.grid == BURNING2) |
+            (self.grid == BURNING3)
+        ))
+
+    # ---------- Editing tools ----------
 
     def set_empty(self, row: int, col: int):
         if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
             self.grid[row, col] = EMPTY
 
     def set_barrier(self, row: int, col: int, enabled: bool = True):
-        """Ставимо/знімаємо бар’єр. Не ставимо поверх стадій горіння."""
         if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
             v = int(self.grid[row, col])
             if enabled:
@@ -114,12 +127,11 @@ class ForestFireCA:
                 self.grid[row, col] = TREE_CONIF
 
     def ignite(self, row: int, col: int):
-        """Підпал тільки на деревах. Стартуємо зі стадії BURNING1."""
         if 0 <= row < self.cfg.height and 0 <= col < self.cfg.width:
             if int(self.grid[row, col]) in TREE_STATES:
                 self.grid[row, col] = BURNING1
 
-    # ----------- Simulation internals -----------
+    # ---------- Internals ----------
 
     def _shift_no_wrap(self, mask: np.ndarray, dx: int, dy: int) -> np.ndarray:
         h, w = mask.shape
@@ -143,7 +155,7 @@ class ForestFireCA:
         wx, wy = self._WIND_DIRS.get(self.cfg.wind_dir, (0, 1))
         d_norm = (dx * dx + dy * dy) ** 0.5
         w_norm = (wx * wx + wy * wy) ** 0.5
-        dot = (dx * wx + dy * wy) / (d_norm * w_norm)  # [-1..1]
+        dot = (dx * wx + dy * wy) / (d_norm * w_norm)
 
         s = float(self.cfg.wind_strength)
         p = 1.0 - s * (1.0 - dot) / 2.0
@@ -152,14 +164,53 @@ class ForestFireCA:
     def _temp_norm(self) -> float:
         t = float(self.cfg.temperature_c)
         return float(np.clip((t - self._T_MIN) / (self._T_MAX - self._T_MIN), 0.0, 1.0))
-    
-    def has_active_fire(self) -> bool:
-        """Чи є на полі хоча б одна клітинка в стадії горіння."""
-        return bool(np.any(
-            (self.grid == BURNING1) |
-            (self.grid == BURNING2) |
-            (self.grid == BURNING3)
-        ))
+
+    def _lightning_event(self, tree_mask: np.ndarray, susceptibility: np.ndarray) -> np.ndarray:
+        """
+        Блискавка як окрема подія:
+        - трапляється рідко,
+        - має максимум K займання за подію,
+        - між подіями є cooldown.
+        """
+        ignite = np.zeros_like(tree_mask, dtype=bool)
+
+        if not self.cfg.lightning_enabled:
+            if self._lightning_cooldown > 0:
+                self._lightning_cooldown -= 1
+            return ignite
+
+        if self._lightning_cooldown > 0:
+            self._lightning_cooldown -= 1
+            return ignite
+
+        # Чи сталася подія блискавки на цьому кроці
+        if self.rng.random() >= float(np.clip(self.cfg.f, 0.0, 1.0)):
+            return ignite
+
+        eligible = np.flatnonzero(tree_mask)
+        if eligible.size == 0:
+            return ignite
+
+        max_k = min(int(self.cfg.lightning_max_strikes_per_event), eligible.size)
+        if max_k <= 0:
+            return ignite
+
+        k = int(self.rng.integers(1, max_k + 1))
+
+        # Більш сухі/займисті клітини частіше стають цілями
+        weights = susceptibility.ravel()[eligible].astype(np.float64)
+        total = weights.sum()
+        if total <= 0:
+            return ignite
+        weights /= total
+
+        chosen = self.rng.choice(eligible, size=k, replace=False, p=weights)
+        ignite.ravel()[chosen] = True
+
+        self._lightning_cooldown = int(self.cfg.lightning_cooldown_steps)
+        return ignite
+
+    # ---------- Step ----------
 
     def step(self):
         g = self.grid
@@ -175,25 +226,23 @@ class ForestFireCA:
         barrier = (g == BARRIER)
         burnt = (g == BURNT)
 
-        # Humidity + Temperature -> dryness_eff
         humidity = float(np.clip(self.cfg.humidity, 0.0, 1.0))
         dryness = 1.0 - humidity
+
         t_norm = self._temp_norm()
         temp_factor = 0.5 + t_norm
         dryness_eff = float(np.clip(dryness * temp_factor, 0.0, 1.0))
 
-        # Flammability per cell
         flamm = np.zeros(g.shape, dtype=np.float32)
         flamm[decid] = float(np.clip(self.cfg.flamm_decid, 0.0, 5.0))
         flamm[conif] = float(np.clip(self.cfg.flamm_conif, 0.0, 5.0))
 
-        # Stage factors
         s1, s2, s3 = self.cfg.burn_stage_factors
         s1 = float(np.clip(s1, 0.0, 1.0))
         s2 = float(np.clip(s2, 0.0, 1.0))
         s3 = float(np.clip(s3, 0.0, 1.0))
 
-        # Rule 2: ignite from neighbors, але з урахуванням стадії джерела
+        # Поширення від сусідів
         ignite_from_neighbors = np.zeros_like(is_tree, dtype=bool)
 
         for dx, dy in self._DIRS:
@@ -201,8 +250,11 @@ class ForestFireCA:
             src2 = self._shift_no_wrap(b2, dx, dy)
             src3 = self._shift_no_wrap(b3, dx, dy)
 
-            # інтенсивність джерела в цій позиції (0, або s1/s2/s3)
-            src_factor = (src1.astype(np.float32) * s1) + (src2.astype(np.float32) * s2) + (src3.astype(np.float32) * s3)
+            src_factor = (
+                src1.astype(np.float32) * s1 +
+                src2.astype(np.float32) * s2 +
+                src3.astype(np.float32) * s3
+            )
 
             candidates = is_tree & (src_factor > 0.0)
             if not candidates.any():
@@ -213,14 +265,9 @@ class ForestFireCA:
 
             ignite_from_neighbors |= candidates & (self.rng.random(g.shape) < p_eff)
 
-        # Rule 3: lightning -> завжди стартує з BURNING1
-        f_base = self.cfg.f if self.cfg.lightning_enabled else 0.0
-        f_eff = float(np.clip(f_base * dryness_eff, 0.0, 1.0))
-        if f_eff > 0.0:
-            p_light = np.clip(f_eff * flamm, 0.0, 1.0).astype(np.float32)
-            ignite_lightning = is_tree & (self.rng.random(g.shape) < p_light)
-        else:
-            ignite_lightning = np.zeros_like(is_tree, dtype=bool)
+        # Блискавка як подія
+        susceptibility = np.clip(dryness_eff * flamm, 0.0, 1.0).astype(np.float32)
+        ignite_lightning = self._lightning_event(is_tree, susceptibility)
 
         ignite = ignite_from_neighbors | ignite_lightning
 
@@ -230,12 +277,12 @@ class ForestFireCA:
         next_g[barrier] = BARRIER
         next_g[burnt] = BURNT
 
-        # прогресія горіння
+        # прогресія стадій горіння
         next_g[b3] = BURNT
         next_g[b2] = BURNING3
         next_g[b1] = BURNING2
 
-        # дерева, які не загорілись
+        # дерева, які не загорілися
         next_g[decid & ~ignite] = TREE_DECID
         next_g[conif & ~ignite] = TREE_CONIF
 
