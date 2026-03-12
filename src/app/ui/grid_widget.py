@@ -2,7 +2,7 @@ from __future__ import annotations
 import numpy as np
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QImage, QPainter
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QSizePolicy
 
 from src.app.utils.palette import PALETTE
 
@@ -20,7 +20,8 @@ class GridWidget(QWidget):
         self._paint_button = Qt.LeftButton
         self._last_cell: tuple[int, int] | None = None
 
-        self.setMinimumSize(400, 400)
+        self.setMinimumSize(280, 280)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMouseTracking(True)
 
     def set_grid(self, grid: np.ndarray):

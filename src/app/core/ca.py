@@ -46,8 +46,18 @@ class CAConfig:
     flamm_decid: float = 0.85
     flamm_conif: float = 1.00
 
-    # Стадії горіння: чим пізніша стадія, тим менший вплив на сусідів
+    # Стадії горіння
     burn_stage_factors: tuple[float, float, float] = (1.00, 0.55, 0.25)
+
+    # Rain (manual)
+    rain_enabled: bool = False
+    rain_intensity: float = 0.0            # 0..1
+
+    # Rain scenario (automatic)
+    rain_scenario_enabled: bool = False
+    rain_scenario_start_step: int = 20
+    rain_scenario_end_step: int = 35       # активний інтервал: [start, end)
+    rain_scenario_intensity: float = 0.5   # 0..1
 
 
 class ForestFireCA:
@@ -91,7 +101,7 @@ class ForestFireCA:
         self.step_count = 0
         self._lightning_cooldown = 0
 
-    # ---------- Utility ----------
+    # ---------- Public helpers ----------
 
     def has_active_fire(self) -> bool:
         return bool(np.any(
@@ -99,6 +109,19 @@ class ForestFireCA:
             (self.grid == BURNING2) |
             (self.grid == BURNING3)
         ))
+
+    def current_rain_intensity(self) -> float:
+        """Повертає сумарну інтенсивність дощу (ручний + сценарний), обрізану до [0..1]."""
+        manual = float(self.cfg.rain_intensity) if self.cfg.rain_enabled else 0.0
+
+        scenario = 0.0
+        if self.cfg.rain_scenario_enabled:
+            start = int(self.cfg.rain_scenario_start_step)
+            end = int(self.cfg.rain_scenario_end_step)
+            if start <= self.step_count < end and end > start:
+                scenario = float(self.cfg.rain_scenario_intensity)
+
+        return float(np.clip(manual + scenario, 0.0, 1.0))
 
     # ---------- Editing tools ----------
 
@@ -165,7 +188,7 @@ class ForestFireCA:
         t = float(self.cfg.temperature_c)
         return float(np.clip((t - self._T_MIN) / (self._T_MAX - self._T_MIN), 0.0, 1.0))
 
-    def _lightning_event(self, tree_mask: np.ndarray, susceptibility: np.ndarray) -> np.ndarray:
+    def _lightning_event(self, tree_mask: np.ndarray, susceptibility: np.ndarray, event_prob: float) -> np.ndarray:
         """
         Блискавка як окрема подія:
         - трапляється рідко,
@@ -183,8 +206,7 @@ class ForestFireCA:
             self._lightning_cooldown -= 1
             return ignite
 
-        # Чи сталася подія блискавки на цьому кроці
-        if self.rng.random() >= float(np.clip(self.cfg.f, 0.0, 1.0)):
+        if self.rng.random() >= float(np.clip(event_prob, 0.0, 1.0)):
             return ignite
 
         eligible = np.flatnonzero(tree_mask)
@@ -226,17 +248,25 @@ class ForestFireCA:
         barrier = (g == BARRIER)
         burnt = (g == BURNT)
 
+        # Humidity + Temperature
         humidity = float(np.clip(self.cfg.humidity, 0.0, 1.0))
         dryness = 1.0 - humidity
 
         t_norm = self._temp_norm()
         temp_factor = 0.5 + t_norm
-        dryness_eff = float(np.clip(dryness * temp_factor, 0.0, 1.0))
 
+        # Rain
+        rain = self.current_rain_intensity()
+
+        # Ефективна сухість з урахуванням дощу
+        dryness_eff = float(np.clip(dryness * temp_factor * (1.0 - rain), 0.0, 1.0))
+
+        # Flammability
         flamm = np.zeros(g.shape, dtype=np.float32)
         flamm[decid] = float(np.clip(self.cfg.flamm_decid, 0.0, 5.0))
         flamm[conif] = float(np.clip(self.cfg.flamm_conif, 0.0, 5.0))
 
+        # Stage factors
         s1, s2, s3 = self.cfg.burn_stage_factors
         s1 = float(np.clip(s1, 0.0, 1.0))
         s2 = float(np.clip(s2, 0.0, 1.0))
@@ -267,9 +297,17 @@ class ForestFireCA:
 
         # Блискавка як подія
         susceptibility = np.clip(dryness_eff * flamm, 0.0, 1.0).astype(np.float32)
-        ignite_lightning = self._lightning_event(is_tree, susceptibility)
+        # Дощ сильніше пригнічує нові удари блискавки
+        lightning_event_prob = float(np.clip(self.cfg.f * (1.0 - rain) ** 2, 0.0, 1.0))
+        ignite_lightning = self._lightning_event(is_tree, susceptibility, lightning_event_prob)
 
         ignite = ignite_from_neighbors | ignite_lightning
+
+        # Вплив дощу на вже існуюче горіння:
+        # - частина BURNING1 швидше "охолоджується" до BURNING3
+        # - частина BURNING2 одразу гасне до BURNT
+        dampen_b1 = b1 & (self.rng.random(g.shape) < (0.25 * rain))
+        extinguish_b2 = b2 & (self.rng.random(g.shape) < (0.50 * rain))
 
         # Build next grid
         next_g = np.full(g.shape, EMPTY, dtype=np.uint8)
@@ -279,8 +317,11 @@ class ForestFireCA:
 
         # прогресія стадій горіння
         next_g[b3] = BURNT
-        next_g[b2] = BURNING3
-        next_g[b1] = BURNING2
+        next_g[b2 & ~extinguish_b2] = BURNING3
+        next_g[extinguish_b2] = BURNT
+
+        next_g[b1 & ~dampen_b1] = BURNING2
+        next_g[dampen_b1] = BURNING3
 
         # дерева, які не загорілися
         next_g[decid & ~ignite] = TREE_DECID

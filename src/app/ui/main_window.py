@@ -3,7 +3,7 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QSlider, QComboBox,
-    QCheckBox, QSpinBox
+    QCheckBox, QSpinBox, QScrollArea
 )
 
 from src.app.core.ca import (
@@ -41,6 +41,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Forest Fire CA Simulator (Moore)")
 
+        self.resize(1400, 900)
+        self.setMinimumSize(1200, 700)
+
         self.cfg = CAConfig(
             width=20,
             height=20,
@@ -51,17 +54,26 @@ class MainWindow(QMainWindow):
             lightning_max_strikes_per_event=1,
             lightning_cooldown_steps=20,
 
-            humidity=0.20,
+            humidity=0.30,
             temperature_c=25.0,
 
             conifer_ratio=0.50,
-            flamm_decid=0.85,
-            flamm_conif=1.00,
+            flamm_decid=0.75,
+            flamm_conif=0.80,
             burn_stage_factors=(1.00, 0.55, 0.25),
+
+            # Rain
+            rain_enabled=False,
+            rain_intensity=0.0,
+            rain_scenario_enabled=False,
+            rain_scenario_start_step=20,
+            rain_scenario_end_step=40,
+            rain_scenario_intensity=0.3,
         )
+
         self.ca = ForestFireCA(self.cfg)
 
-        # Чи вже був хоча б один осередок пожежі в поточному запуску
+        # Один запуск = один пожежний інцидент
         self.run_has_seen_fire = False
 
         central = QWidget()
@@ -75,10 +87,16 @@ class MainWindow(QMainWindow):
         # Panel
         panel = QWidget()
         panel_l = QVBoxLayout(panel)
-        root.addWidget(panel, 2)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(panel)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        root.addWidget(scroll, 2)
 
         panel_l.addWidget(QLabel("Left-drag: tool | Right-drag: Erase"))
-        panel_l.addWidget(QLabel("Поточний запуск = один пожежний інцидент."))
+        # panel_l.addWidget(QLabel("Поточний запуск = один пожежний інцидент."))
 
         # Tool selector
         panel_l.addWidget(QLabel("Tool:"))
@@ -164,6 +182,59 @@ class MainWindow(QMainWindow):
         temp_l.addWidget(self.temp_lab, 1)
         temp_l.addWidget(self.temp_slider, 4)
         panel_l.addWidget(temp_row)
+
+        # Rain (manual)
+        panel_l.addWidget(QLabel("Rain (manual):"))
+
+        self.chk_rain = QCheckBox("Rain enabled")
+        self.chk_rain.setChecked(self.cfg.rain_enabled)
+        panel_l.addWidget(self.chk_rain)
+
+        rain_row = QWidget()
+        rain_l = QHBoxLayout(rain_row)
+        rain_l.setContentsMargins(0, 0, 0, 0)
+        self.rain_lab = QLabel(f"Rain intensity: {self.cfg.rain_intensity:.2f}")
+        self.rain_slider = QSlider(Qt.Horizontal)
+        self.rain_slider.setRange(0, 100)
+        self.rain_slider.setValue(int(self.cfg.rain_intensity * 100))
+        rain_l.addWidget(self.rain_lab, 1)
+        rain_l.addWidget(self.rain_slider, 4)
+        panel_l.addWidget(rain_row)
+
+        # Rain (scenario)
+        panel_l.addWidget(QLabel("Rain scenario:"))
+
+        self.chk_rain_scenario = QCheckBox("Scenario rain enabled")
+        self.chk_rain_scenario.setChecked(self.cfg.rain_scenario_enabled)
+        panel_l.addWidget(self.chk_rain_scenario)
+
+        rs_row = QWidget()
+        rs_l = QHBoxLayout(rs_row)
+        rs_l.setContentsMargins(0, 0, 0, 0)
+        self.rain_scen_lab = QLabel(f"Scenario rain intensity: {self.cfg.rain_scenario_intensity:.2f}")
+        self.rain_scen_slider = QSlider(Qt.Horizontal)
+        self.rain_scen_slider.setRange(0, 100)
+        self.rain_scen_slider.setValue(int(self.cfg.rain_scenario_intensity * 100))
+        rs_l.addWidget(self.rain_scen_lab, 1)
+        rs_l.addWidget(self.rain_scen_slider, 4)
+        panel_l.addWidget(rs_row)
+
+        rain_steps_row = QHBoxLayout()
+        rain_steps_row.addWidget(QLabel("Rain start step:"))
+        self.rain_start_spin = QSpinBox()
+        self.rain_start_spin.setRange(0, 100000)
+        self.rain_start_spin.setValue(self.cfg.rain_scenario_start_step)
+        rain_steps_row.addWidget(self.rain_start_spin)
+
+        rain_steps_row.addWidget(QLabel("End step:"))
+        self.rain_end_spin = QSpinBox()
+        self.rain_end_spin.setRange(0, 100000)
+        self.rain_end_spin.setValue(self.cfg.rain_scenario_end_step)
+        rain_steps_row.addWidget(self.rain_end_spin)
+        panel_l.addLayout(rain_steps_row)
+
+        self.rain_status_lab = QLabel("Rain active now: OFF")
+        panel_l.addWidget(self.rain_status_lab)
 
         # Vegetation
         panel_l.addWidget(QLabel("Vegetation:"))
@@ -256,6 +327,14 @@ class MainWindow(QMainWindow):
         self.hum_slider.valueChanged.connect(self.on_humidity_changed)
         self.temp_slider.valueChanged.connect(self.on_temperature_changed)
 
+        self.chk_rain.toggled.connect(self.on_rain_toggled)
+        self.rain_slider.valueChanged.connect(self.on_rain_intensity_changed)
+
+        self.chk_rain_scenario.toggled.connect(self.on_rain_scenario_toggled)
+        self.rain_scen_slider.valueChanged.connect(self.on_rain_scenario_intensity_changed)
+        self.rain_start_spin.valueChanged.connect(self.on_rain_scenario_steps_changed)
+        self.rain_end_spin.valueChanged.connect(self.on_rain_scenario_steps_changed)
+
         self.conif_slider.valueChanged.connect(self.on_conifer_ratio_changed)
         self.flamm_d_slider.valueChanged.connect(self.on_flammability_changed)
         self.flamm_c_slider.valueChanged.connect(self.on_flammability_changed)
@@ -265,13 +344,13 @@ class MainWindow(QMainWindow):
         # First render
         self.grid_widget.set_grid(self.ca.grid)
         self._update_f_label_and_state()
+        self._update_rain_status()
 
     # ---- Simulation controls ----
 
     def on_start(self):
         self.run_has_seen_fire = self.ca.has_active_fire()
 
-        # Якщо взагалі немає шансів ні на активний вогонь, ні на блискавку — не стартуємо
         if not self.ca.has_active_fire() and (not self.cfg.lightning_enabled or self.cfg.f <= 0.0):
             self.statusBar().showMessage(
                 "Немає активного займання і блискавка вимкнена.",
@@ -293,6 +372,7 @@ class MainWindow(QMainWindow):
         self.run_has_seen_fire = False
         self.grid_widget.set_grid(self.ca.grid)
         self.stats.setText(f"Step: {self.ca.step_count}")
+        self._update_rain_status()
 
     def on_apply_size(self):
         self.timer.stop()
@@ -302,17 +382,18 @@ class MainWindow(QMainWindow):
         self.run_has_seen_fire = False
         self.grid_widget.set_grid(self.ca.grid)
         self.stats.setText(f"Step: {self.ca.step_count}")
+        self._update_rain_status()
 
     def on_tick(self):
         self.ca.step()
         self.grid_widget.set_grid(self.ca.grid)
         self.stats.setText(f"Step: {self.ca.step_count}")
+        self._update_rain_status()
 
         if self.ca.has_active_fire():
             self.run_has_seen_fire = True
 
         # Один запуск = один інцидент:
-        # якщо пожежа вже була і тепер повністю згасла, зупиняємо симуляцію
         if self.run_has_seen_fire and not self.ca.has_active_fire():
             self.timer.stop()
             self.statusBar().showMessage("Пожежний інцидент завершився.", 2500)
@@ -382,6 +463,40 @@ class MainWindow(QMainWindow):
     def on_temperature_changed(self, v: int):
         self.cfg.temperature_c = float(v)
         self.temp_lab.setText(f"Temperature: {v} °C")
+
+    # ---- Rain ----
+
+    def on_rain_toggled(self, checked: bool):
+        self.cfg.rain_enabled = bool(checked)
+        self._update_rain_status()
+
+    def on_rain_intensity_changed(self, v: int):
+        self.cfg.rain_intensity = v / 100.0
+        self.rain_lab.setText(f"Rain intensity: {self.cfg.rain_intensity:.2f}")
+        self._update_rain_status()
+
+    def on_rain_scenario_toggled(self, checked: bool):
+        self.cfg.rain_scenario_enabled = bool(checked)
+        self._update_rain_status()
+
+    def on_rain_scenario_intensity_changed(self, v: int):
+        self.cfg.rain_scenario_intensity = v / 100.0
+        self.rain_scen_lab.setText(f"Scenario rain intensity: {self.cfg.rain_scenario_intensity:.2f}")
+        self._update_rain_status()
+
+    def on_rain_scenario_steps_changed(self):
+        self.cfg.rain_scenario_start_step = int(self.rain_start_spin.value())
+        self.cfg.rain_scenario_end_step = int(self.rain_end_spin.value())
+        self._update_rain_status()
+
+    def _update_rain_status(self):
+        current = self.ca.current_rain_intensity()
+        if current > 0:
+            self.rain_status_lab.setText(f"Rain active now: {current:.2f}")
+        else:
+            self.rain_status_lab.setText("Rain active now: OFF")
+
+    # ---- Vegetation ----
 
     def on_conifer_ratio_changed(self, v: int):
         self.cfg.conifer_ratio = v / 100.0
