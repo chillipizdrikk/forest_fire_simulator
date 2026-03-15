@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSlider,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -51,6 +52,7 @@ def slider_float(label: str, min_v: float, max_v: float, init: float, steps: int
     slider = QSlider(Qt.Horizontal)
     slider.setMinimum(0)
     slider.setMaximum(steps)
+    slider.setMinimumHeight(24)
 
     def to_slider(x):
         return int((x - min_v) / (max_v - min_v) * steps)
@@ -160,7 +162,7 @@ class MainWindow(QMainWindow):
             }
 
             QFrame#Card, QGroupBox {
-                background: #111827;
+                background-color: #111827;
                 border: 1px solid #243244;
                 border-radius: 16px;
             }
@@ -179,103 +181,197 @@ class MainWindow(QMainWindow):
             }
 
             QPushButton {
-                background: #1d4ed8;
-                border: none;
+                background-color: #1d4ed8;
+                border: 1px solid #3b82f6;
                 border-radius: 10px;
                 padding: 10px 14px;
                 color: white;
                 font-weight: 600;
+                min-height: 18px;
             }
 
             QPushButton:hover {
-                background: #2563eb;
+                background-color: #2563eb;
+                border: 1px solid #60a5fa;
             }
 
             QPushButton:pressed {
-                background: #1e40af;
+                background-color: #1e40af;
+                border: 1px solid #93c5fd;
             }
 
             QPushButton#SecondaryBtn {
-                background: #1f2937;
+                background-color: #1f2937;
                 border: 1px solid #334155;
+                color: #f8fafc;
             }
 
             QPushButton#SecondaryBtn:hover {
-                background: #273449;
+                background-color: #273449;
+                border: 1px solid #475569;
             }
 
             QPushButton#DangerBtn {
-                background: #7f1d1d;
+                background-color: #7f1d1d;
+                border: 1px solid #b91c1c;
+                color: white;
             }
 
             QPushButton#DangerBtn:hover {
-                background: #991b1b;
+                background-color: #991b1b;
+                border: 1px solid #ef4444;
             }
 
             QComboBox, QSpinBox {
-                background: #0f172a;
+                background-color: #0f172a;
                 border: 1px solid #334155;
                 border-radius: 10px;
                 padding: 8px 10px;
-                min-height: 18px;
+                min-height: 20px;
                 color: #f8fafc;
                 selection-background-color: #1d4ed8;
+                selection-color: white;
+            }
+
+            QComboBox:hover, QSpinBox:hover {
+                border: 1px solid #475569;
+            }
+
+            QComboBox:focus, QSpinBox:focus {
+                border: 1px solid #60a5fa;
+            }
+
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 28px;
+                border: none;
+                background-color: #162033;
+                border-top-right-radius: 10px;
+                border-bottom-right-radius: 10px;
+            }
+
+            QComboBox::down-arrow {
+                width: 10px;
+                height: 10px;
             }
 
             QComboBox QAbstractItemView {
-                background: #0f172a;
+                background-color: #0f172a;
                 color: #f8fafc;
                 border: 1px solid #334155;
+                outline: 0px;
                 selection-background-color: #2563eb;
                 selection-color: white;
             }
 
-            QSpinBox::up-button, QSpinBox::down-button,
-            QComboBox::drop-down {
+            QSpinBox::up-button, QSpinBox::down-button {
                 border: none;
                 width: 24px;
+                background-color: #162033;
+            }
+
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+                background-color: #1d2940;
+            }
+
+            QSlider {
+                min-height: 24px;
             }
 
             QSlider::groove:horizontal {
                 border: none;
-                height: 6px;
-                border-radius: 3px;
+                height: 8px;
+                border-radius: 4px;
                 background: #334155;
+                margin: 0 2px;
             }
 
             QSlider::handle:horizontal {
                 background: #60a5fa;
                 border: 2px solid #dbeafe;
-                width: 16px;
-                margin: -6px 0;
-                border-radius: 8px;
+                width: 14px;
+                height: 14px;
+                margin: -4px 0;
+                border-radius: 9px;
             }
+
+            QSlider::sub-page:horizontal {
+                background: #3b82f6;
+                border-radius: 4px;
+            }
+
+            # QCheckBox {
+            #     spacing: 10px;
+            #     color: #e2e8f0;
+            # }
+
+            # QCheckBox::indicator {
+            #     width: 18px;
+            #     height: 18px;
+            #     border-radius: 5px;
+            #     border: 1px solid #475569;
+            #     background-color: #0f172a;
+            # }
+
+            # QCheckBox::indicator:hover {
+            #     border: 1px solid #60a5fa;
+            # }
+
+            # QCheckBox::indicator:checked {
+            #     background-color: #1d4ed8;
+            #     border: 1px solid #93c5fd;
+            # }
+
+            # QCheckBox::indicator:checked::after {
+            #     color: white;
+            # }
 
             QCheckBox {
-                spacing: 10px;
+                spacing: 8px;
                 color: #e2e8f0;
-            }
-
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-                border-radius: 5px;
-                border: 1px solid #475569;
-                background: #0f172a;
-            }
-
-            QCheckBox::indicator:checked {
-                background: #2563eb;
-                border: 1px solid #60a5fa;
+                background: transparent;
             }
 
             QScrollArea {
                 border: none;
-                background: transparent;
+                background-color: transparent;
+            }
+
+            QScrollArea > QWidget > QWidget {
+                background-color: transparent;
+            }
+
+            QTabWidget::pane {
+                border: 1px solid #243244;
+                background-color: #111827;
+                border-radius: 16px;
+                top: -1px;
+            }
+
+            QTabBar::tab {
+                background-color: #0f172a;
+                color: #cbd5e1;
+                border: 1px solid #243244;
+                padding: 10px 14px;
+                margin-right: 6px;
+                border-top-left-radius: 10px;
+                border-top-right-radius: 10px;
+                min-width: 96px;
+            }
+
+            QTabBar::tab:selected {
+                background-color: #111827;
+                color: #f8fafc;
+                border-bottom-color: #111827;
+            }
+
+            QTabBar::tab:hover:!selected {
+                background-color: #162033;
             }
 
             QStatusBar {
-                background: #0f172a;
+                background-color: #0f172a;
                 color: #cbd5e1;
             }
             """
@@ -295,15 +391,11 @@ class MainWindow(QMainWindow):
         header_card = self._create_card()
         header_layout = QVBoxLayout(header_card)
         header_layout.setSpacing(8)
+
         title = QLabel("Forest Fire Cellular Automata Simulator")
         title.setObjectName("Title")
-        subtitle = QLabel(
-            "Охайний інтерфейс для демонстрації сценаріїв займання, впливу вітру, вологості, дощу та блискавки."
-        )
-        subtitle.setWordWrap(True)
-        subtitle.setObjectName("Subtitle")
+
         header_layout.addWidget(title)
-        header_layout.addWidget(subtitle)
         left_col.addWidget(header_card)
 
         self.sim_card = self._create_card()
@@ -312,11 +404,16 @@ class MainWindow(QMainWindow):
 
         top_bar = QHBoxLayout()
         text_col = QVBoxLayout()
+
         sim_title = QLabel("Simulation field")
         sim_title.setObjectName("SectionTitle")
-        sim_hint = QLabel("Ліва кнопка миші — активний інструмент, права — стирання. Для редагування карта має бути на паузі.")
+
+        sim_hint = QLabel(
+            "Ліва кнопка миші — активний інструмент, права — стирання. Для редагування карта має бути на паузі."
+        )
         sim_hint.setWordWrap(True)
         sim_hint.setObjectName("Hint")
+
         text_col.addWidget(sim_title)
         text_col.addWidget(sim_hint)
         top_bar.addLayout(text_col, 1)
@@ -324,6 +421,7 @@ class MainWindow(QMainWindow):
         self.status_chip = QLabel("READY")
         self.status_chip.setObjectName("ValueBadge")
         top_bar.addWidget(self.status_chip, 0, Qt.AlignTop)
+
         sim_layout.addLayout(top_bar)
 
         self.grid_widget = GridWidget()
@@ -331,25 +429,46 @@ class MainWindow(QMainWindow):
         sim_layout.addWidget(self._build_legend())
         left_col.addWidget(self.sim_card, 1)
 
-        right_scroll = QScrollArea()
-        right_scroll.setWidgetResizable(True)
-        right_scroll.setMinimumWidth(410)
-        right_scroll.setMaximumWidth(470)
-        root.addWidget(right_scroll, 2)
+        self.right_card = self._create_card()
+        self.right_card.setMinimumWidth(430)
+        self.right_card.setMaximumWidth(500)
+        root.addWidget(self.right_card, 2)
 
-        panel = QWidget()
-        right_scroll.setWidget(panel)
-        self.panel_layout = QVBoxLayout(panel)
-        self.panel_layout.setContentsMargins(0, 0, 4, 0)
-        self.panel_layout.setSpacing(14)
+        right_layout = QVBoxLayout(self.right_card)
+        right_layout.setContentsMargins(14, 14, 14, 14)
+        right_layout.setSpacing(12)
+
+        side_title = QLabel("Control panel")
+        side_title.setObjectName("SectionTitle")
+        right_layout.addWidget(side_title)
 
         self._build_stats_card()
+        right_layout.addWidget(self.stats_card)
+
+        self.tabs = QTabWidget()
+        right_layout.addWidget(self.tabs, 1)
+
+        self.tab_general = self._make_tab_page()
+        self.tab_environment = self._make_tab_page()
+        self.tab_advanced = self._make_tab_page()
+
+        self.tabs.addTab(self.tab_general["scroll"], "General")
+        self.tabs.addTab(self.tab_environment["scroll"], "Environment")
+        self.tabs.addTab(self.tab_advanced["scroll"], "Advanced")
+
+        self.general_layout = self.tab_general["layout"]
+        self.environment_layout = self.tab_environment["layout"]
+        self.advanced_layout = self.tab_advanced["layout"]
+
         self._build_controls_card()
         self._build_environment_group()
         self._build_rain_group()
         self._build_vegetation_group()
         self._build_lightning_group()
-        self.panel_layout.addStretch(1)
+
+        self.general_layout.addStretch(1)
+        self.environment_layout.addStretch(1)
+        self.advanced_layout.addStretch(1)
 
         self.statusBar().showMessage("Готово до редагування карти.")
 
@@ -399,8 +518,8 @@ class MainWindow(QMainWindow):
         self.on_wind_toggled(self.cfg.wind_enabled)
 
     def _build_stats_card(self):
-        card = self._create_card()
-        layout = QVBoxLayout(card)
+        self.stats_card = self._create_card()
+        layout = QVBoxLayout(self.stats_card)
         layout.setSpacing(12)
 
         title = QLabel("Overview")
@@ -427,7 +546,6 @@ class MainWindow(QMainWindow):
             grid.addWidget(stat_card, i // 2, i % 2)
 
         layout.addLayout(grid)
-        self.panel_layout.addWidget(card)
 
     def _build_controls_card(self):
         card = self._create_card()
@@ -494,7 +612,7 @@ class MainWindow(QMainWindow):
         speed_layout.addWidget(self.speed_slider)
         layout.addWidget(speed_row)
 
-        self.panel_layout.addWidget(card)
+        self.general_layout.addWidget(card)
 
     def _build_environment_group(self):
         group = QGroupBox("Environment")
@@ -532,7 +650,7 @@ class MainWindow(QMainWindow):
         temp_layout.addWidget(self.temp_slider)
         layout.addWidget(temp_widget)
 
-        self.panel_layout.addWidget(group)
+        self.environment_layout.addWidget(group)
 
     def _build_rain_group(self):
         group = QGroupBox("Rain settings")
@@ -568,7 +686,7 @@ class MainWindow(QMainWindow):
         self.rain_status_lab = QLabel("Rain active now: OFF")
         self.rain_status_lab.setObjectName("Hint")
         layout.addWidget(self.rain_status_lab)
-        self.panel_layout.addWidget(group)
+        self.environment_layout.addWidget(group)
 
     def _build_vegetation_group(self):
         group = QGroupBox("Vegetation")
@@ -584,7 +702,7 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(d_row)
         layout.addWidget(c_row)
-        self.panel_layout.addWidget(group)
+        self.advanced_layout.addWidget(group)
 
     def _build_lightning_group(self):
         group = QGroupBox("Lightning")
@@ -614,7 +732,7 @@ class MainWindow(QMainWindow):
         self.lightning_status = QLabel("")
         self.lightning_status.setObjectName("Hint")
         layout.addWidget(self.lightning_status)
-        self.panel_layout.addWidget(group)
+        self.advanced_layout.addWidget(group)
 
     def _build_legend(self):
         card = self._create_card()
@@ -649,6 +767,24 @@ class MainWindow(QMainWindow):
         card = QFrame()
         card.setObjectName("Card")
         return card
+    
+    def _make_tab_page(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+
+        content = QWidget()
+        content.setStyleSheet("background: #111827;")
+        scroll.setWidget(content)
+
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(4, 6, 4, 6)
+        layout.setSpacing(14)
+
+        return {
+            "scroll": scroll,
+            "content": content,
+            "layout": layout,
+        }
 
     def _labeled_widget(self, text: str, widget: QWidget):
         container = QWidget()
@@ -665,20 +801,29 @@ class MainWindow(QMainWindow):
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
+        layout.setSpacing(8)
+
         head = QHBoxLayout()
+        head.setContentsMargins(0, 0, 0, 0)
+
         title = QLabel(text)
         title.setObjectName("FieldLabel")
+
         value_label = QLabel(fmt.format(value / scale))
         value_label.setObjectName("ValueBadge")
+
         head.addWidget(title)
         head.addStretch(1)
         head.addWidget(value_label)
+
         slider = QSlider(Qt.Horizontal)
         slider.setRange(0, 100)
         slider.setValue(value)
+        slider.setMinimumHeight(24)
+
         layout.addLayout(head)
         layout.addWidget(slider)
+
         parent_layout.addWidget(container)
         return value_label, slider
 
