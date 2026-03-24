@@ -36,7 +36,7 @@ class MainWindowActionsMixin:
         self.grid_widget.set_grid(self.ca.grid)
         self._update_rain_status()
         self._update_stats()
-            self.statusBar().showMessage("Мапу скинуто до початкового стану.", 2500)
+        self.statusBar().showMessage("Мапу скинуто до початкового стану.", 2500)
 
     def on_apply_size(self):
         self.timer.stop()
@@ -47,7 +47,7 @@ class MainWindowActionsMixin:
         self.grid_widget.set_grid(self.ca.grid)
         self._update_rain_status()
         self._update_stats()
-            self.statusBar().showMessage("Розмір ґратки оновлено.", 2500)
+        self.statusBar().showMessage("Розмір ґратки оновлено.", 2500)
 
     def on_tick(self):
         self.ca.step()
@@ -93,9 +93,9 @@ class MainWindowActionsMixin:
         tool = self.tool_combo.currentText()
         if tool == "Підпал":
             self.ca.ignite(row, col)
-        elif tool == "Посадити листяне":
+        elif tool == "Посадити листяне дерево":
             self.ca.plant_decid(row, col)
-        elif tool == "Посадити хвойне":
+        elif tool == "Посадити хвойне дерево":
             self.ca.plant_conif(row, col)
         elif tool == "Бар'єр":
             self.ca.set_barrier(row, col, True)

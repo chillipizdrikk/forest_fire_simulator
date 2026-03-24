@@ -48,7 +48,7 @@ def build_controls_group(window):
 
     row = QHBoxLayout()
     window.tool_combo = QComboBox()
-    window.tool_combo.addItems(["Підпал", "Посадити листяне", "Посадити хвойне", "Бар'єр", "Стерти"])
+    window.tool_combo.addItems(["Підпал", "Посадити листяне дерево", "Посадити хвойне дерево", "Бар'єр", "Стерти"])
     window.tool_combo.setCurrentText("Підпал")
     row.addWidget(labeled_widget("Інструмент", window.tool_combo), 1)
     layout.addLayout(row)
@@ -190,7 +190,7 @@ def build_vegetation_group(window):
 
     window.conif_lab, window.conif_slider = slider_row(
         layout,
-        "Частка хвойних",
+        "Частка хвойних дерев",
         int(window.cfg.conifer_ratio * 100),
         "{:.2f}",
         scale=100,

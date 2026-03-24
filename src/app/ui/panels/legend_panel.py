@@ -21,9 +21,9 @@ def build_legend_card():
          (_state_to_hex(EMPTY), "Порожньо"),
         (_state_to_hex(TREE_DECID), "Листяне"),
         (_state_to_hex(TREE_CONIF), "Хвойне"),
-        (_state_to_hex(BURNING1), "Вогонь (стадія 1)"),
-        (_state_to_hex(BURNING2), "Вогонь (стадія 2)"),
-        (_state_to_hex(BURNING3), "Вогонь (стадія 3)"),
+        (_state_to_hex(BURNING1), "Вогонь (1)"),
+        (_state_to_hex(BURNING2), "Вогонь (2)"),
+        (_state_to_hex(BURNING3), "Вогонь (3)"),
         (_state_to_hex(BARRIER), "Бар'єр"),
         (_state_to_hex(BURNT), "Випалено"),
     ]
