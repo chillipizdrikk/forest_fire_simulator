@@ -1,403 +1,121 @@
 from __future__ import annotations
-from PySide6.QtCore import QTimer, Qt
-from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QSlider, QComboBox,
-    QCheckBox, QSpinBox
-)
 
-from src.app.core.ca import (
-    ForestFireCA, CAConfig,
-    EMPTY, TREE_DECID, TREE_CONIF, BURNING, BARRIER, BURNT
-)
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QVBoxLayout, QWidget
+
+from src.app.core.ca import CAConfig, ForestFireCA
+from src.app.ui.bindings import connect_main_window_signals
 from src.app.ui.grid_widget import GridWidget
+from src.app.ui.main_window_actions import MainWindowActionsMixin
+from src.app.ui.main_window_state import MainWindowStateMixin
+from src.app.ui.panels import build_all_controls, build_controls_tabs, build_legend_card, build_stats_card
+from src.app.ui.panels.common import create_card
+from src.app.ui.styles import apply_main_window_styles
 
 
-def slider_float(label: str, min_v: float, max_v: float, init: float, steps: int = 1000):
-    row = QWidget()
-    layout = QHBoxLayout(row)
-    layout.setContentsMargins(0, 0, 0, 0)
-
-    lab = QLabel(f"{label}: {init:.4f}")
-    s = QSlider(Qt.Horizontal)
-    s.setMinimum(0)
-    s.setMaximum(steps)
-
-    def to_slider(x):
-        return int((x - min_v) / (max_v - min_v) * steps)
-
-    def to_float(v):
-        return min_v + (max_v - min_v) * (v / steps)
-
-    s.setValue(to_slider(init))
-
-    layout.addWidget(lab, 1)
-    layout.addWidget(s, 4)
-    return row, lab, s, to_float
-
-
-class MainWindow(QMainWindow):
+class MainWindow(MainWindowActionsMixin, MainWindowStateMixin, QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Forest Fire CA Simulator (Moore)")
+        self.setWindowTitle("Forest Fire CA Simulator")
+        self.resize(1520, 920)
+        self.setMinimumSize(1280, 760)
 
         self.cfg = CAConfig(
             width=20,
             height=20,
-
-            # Lightning as event
             f=0.01,
             lightning_enabled=True,
             lightning_max_strikes_per_event=1,
             lightning_cooldown_steps=20,
-
-            humidity=0.20,
+            humidity=0.30,
             temperature_c=25.0,
-
             conifer_ratio=0.50,
-            flamm_decid=0.85,
-            flamm_conif=1.00,
+            flamm_decid=0.75,
+            flamm_conif=0.80,
             burn_stage_factors=(1.00, 0.55, 0.25),
+            rain_enabled=False,
+            rain_intensity=0.0,
+            rain_scenario_enabled=False,
+            rain_scenario_start_step=20,
+            rain_scenario_end_step=40,
+            rain_scenario_intensity=0.3,
         )
         self.ca = ForestFireCA(self.cfg)
-
-        # Чи вже був хоча б один осередок пожежі в поточному запуску
         self.run_has_seen_fire = False
 
+        apply_main_window_styles(self)
+        self._build_ui()
+        connect_main_window_signals(self)
+        self._sync_initial_state()
+
+    def _build_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
         root = QHBoxLayout(central)
+        root.setContentsMargins(18, 18, 18, 18)
+        root.setSpacing(18)
 
-        # Grid
+        left_col = QVBoxLayout()
+        left_col.setSpacing(14)
+        root.addLayout(left_col, 5)
+
+        header_card = create_card()
+        header_layout = QVBoxLayout(header_card)
+        header_layout.setSpacing(8)
+
+        title = QLabel("Forest Fire Cellular Automata Simulator")
+        title.setObjectName("Title")
+        header_layout.addWidget(title)
+        left_col.addWidget(header_card)
+
+        self.sim_card = create_card()
+        sim_layout = QVBoxLayout(self.sim_card)
+        sim_layout.setSpacing(14)
+
+        top_bar = QHBoxLayout()
+        text_col = QVBoxLayout()
+
+        sim_title = QLabel("Simulation field")
+        sim_title.setObjectName("SectionTitle")
+
+        sim_hint = QLabel(
+            "Ліва кнопка миші — активний інструмент, права — стирання. Для редагування карта має бути на паузі."
+        )
+        sim_hint.setWordWrap(True)
+        sim_hint.setObjectName("Hint")
+
+        text_col.addWidget(sim_title)
+        text_col.addWidget(sim_hint)
+        top_bar.addLayout(text_col, 1)
+
+        self.status_chip = QLabel("READY")
+        self.status_chip.setObjectName("ValueBadge")
+        top_bar.addWidget(self.status_chip, 0, Qt.AlignTop)
+
+        sim_layout.addLayout(top_bar)
+
         self.grid_widget = GridWidget()
-        root.addWidget(self.grid_widget, 4)
+        sim_layout.addWidget(self.grid_widget, 1)
+        sim_layout.addWidget(build_legend_card())
+        left_col.addWidget(self.sim_card, 1)
 
-        # Panel
-        panel = QWidget()
-        panel_l = QVBoxLayout(panel)
-        root.addWidget(panel, 2)
+        self.right_card = create_card()
+        self.right_card.setMinimumWidth(430)
+        self.right_card.setMaximumWidth(500)
+        root.addWidget(self.right_card, 2)
 
-        panel_l.addWidget(QLabel("Left-drag: tool | Right-drag: Erase"))
-        panel_l.addWidget(QLabel("Поточний запуск = один пожежний інцидент."))
+        right_layout = QVBoxLayout(self.right_card)
+        right_layout.setContentsMargins(14, 14, 14, 14)
+        right_layout.setSpacing(12)
 
-        # Tool selector
-        panel_l.addWidget(QLabel("Tool:"))
-        self.tool_combo = QComboBox()
-        self.tool_combo.addItems(["Ignite", "Plant decid", "Plant conif", "Barrier", "Erase"])
-        self.tool_combo.setCurrentText("Ignite")
-        panel_l.addWidget(self.tool_combo)
+        side_title = QLabel("Control panel")
+        side_title.setObjectName("SectionTitle")
+        right_layout.addWidget(side_title)
 
-        # Buttons
-        btn_row = QHBoxLayout()
-        self.btn_start = QPushButton("Start")
-        self.btn_pause = QPushButton("Pause")
-        self.btn_step = QPushButton("Step")
-        self.btn_reset = QPushButton("Reset map")
-        btn_row.addWidget(self.btn_start)
-        btn_row.addWidget(self.btn_pause)
-        btn_row.addWidget(self.btn_step)
-        btn_row.addWidget(self.btn_reset)
-        panel_l.addLayout(btn_row)
+        build_stats_card(self)
+        right_layout.addWidget(self.stats_card)
 
-        # Grid size
-        panel_l.addWidget(QLabel("Grid size:"))
-        size_row = QHBoxLayout()
-        self.w_spin = QSpinBox()
-        self.h_spin = QSpinBox()
-        self.w_spin.setRange(10, 500)
-        self.h_spin.setRange(10, 500)
-        self.w_spin.setValue(self.cfg.width)
-        self.h_spin.setValue(self.cfg.height)
-        self.btn_apply_size = QPushButton("Apply")
-        size_row.addWidget(QLabel("W"))
-        size_row.addWidget(self.w_spin)
-        size_row.addWidget(QLabel("H"))
-        size_row.addWidget(self.h_spin)
-        size_row.addWidget(self.btn_apply_size)
-        panel_l.addLayout(size_row)
+        build_controls_tabs(self, right_layout)
+        build_all_controls(self)
 
-        # Wind
-        self.chk_wind = QCheckBox("Wind enabled")
-        self.chk_wind.setChecked(self.cfg.wind_enabled)
-        panel_l.addWidget(self.chk_wind)
-
-        self.cmb_wind = QComboBox()
-        self.cmb_wind.addItems(["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
-        self.cmb_wind.setCurrentText(self.cfg.wind_dir)
-        panel_l.addWidget(QLabel("Wind direction:"))
-        panel_l.addWidget(self.cmb_wind)
-
-        wind_row = QWidget()
-        wind_l = QHBoxLayout(wind_row)
-        wind_l.setContentsMargins(0, 0, 0, 0)
-        self.wind_lab = QLabel(f"Wind strength: {self.cfg.wind_strength:.2f}")
-        self.wind_slider = QSlider(Qt.Horizontal)
-        self.wind_slider.setRange(0, 100)
-        self.wind_slider.setValue(int(self.cfg.wind_strength * 100))
-        wind_l.addWidget(self.wind_lab, 1)
-        wind_l.addWidget(self.wind_slider, 4)
-        panel_l.addWidget(wind_row)
-
-        self.cmb_wind.setEnabled(self.cfg.wind_enabled)
-        self.wind_slider.setEnabled(self.cfg.wind_enabled)
-
-        # Humidity
-        hum_row = QWidget()
-        hum_l = QHBoxLayout(hum_row)
-        hum_l.setContentsMargins(0, 0, 0, 0)
-        self.hum_lab = QLabel(f"Humidity: {self.cfg.humidity:.2f}")
-        self.hum_slider = QSlider(Qt.Horizontal)
-        self.hum_slider.setRange(0, 100)
-        self.hum_slider.setValue(int(self.cfg.humidity * 100))
-        hum_l.addWidget(self.hum_lab, 1)
-        hum_l.addWidget(self.hum_slider, 4)
-        panel_l.addWidget(hum_row)
-
-        # Temperature
-        temp_row = QWidget()
-        temp_l = QHBoxLayout(temp_row)
-        temp_l.setContentsMargins(0, 0, 0, 0)
-        self.temp_lab = QLabel(f"Temperature: {self.cfg.temperature_c:.0f} °C")
-        self.temp_slider = QSlider(Qt.Horizontal)
-        self.temp_slider.setRange(-10, 40)
-        self.temp_slider.setValue(int(self.cfg.temperature_c))
-        temp_l.addWidget(self.temp_lab, 1)
-        temp_l.addWidget(self.temp_slider, 4)
-        panel_l.addWidget(temp_row)
-
-        # Vegetation
-        panel_l.addWidget(QLabel("Vegetation:"))
-
-        conif_row = QWidget()
-        conif_l = QHBoxLayout(conif_row)
-        conif_l.setContentsMargins(0, 0, 0, 0)
-        self.conif_lab = QLabel(f"Conifer ratio: {self.cfg.conifer_ratio:.2f}")
-        self.conif_slider = QSlider(Qt.Horizontal)
-        self.conif_slider.setRange(0, 100)
-        self.conif_slider.setValue(int(self.cfg.conifer_ratio * 100))
-        conif_l.addWidget(self.conif_lab, 1)
-        conif_l.addWidget(self.conif_slider, 4)
-        panel_l.addWidget(conif_row)
-
-        d_row, self.flamm_d_lab, self.flamm_d_slider, self.flamm_d_to_float = slider_float(
-            "Flammability (decid)", 0.0, 2.0, self.cfg.flamm_decid
-        )
-        c_row, self.flamm_c_lab, self.flamm_c_slider, self.flamm_c_to_float = slider_float(
-            "Flammability (conif)", 0.0, 2.0, self.cfg.flamm_conif
-        )
-        panel_l.addWidget(d_row)
-        panel_l.addWidget(c_row)
-
-        # Lightning
-        self.chk_lightning = QCheckBox("Lightning enabled")
-        self.chk_lightning.setChecked(self.cfg.lightning_enabled)
-        panel_l.addWidget(self.chk_lightning)
-
-        f_row, self.f_lab, self.f_slider, self.f_to_float = slider_float(
-            "Lightning event probability", 0.0, 0.20, self.cfg.f
-        )
-        panel_l.addWidget(f_row)
-
-        strikes_row = QHBoxLayout()
-        strikes_row.addWidget(QLabel("Max strikes / event:"))
-        self.strikes_spin = QSpinBox()
-        self.strikes_spin.setRange(1, 20)
-        self.strikes_spin.setValue(self.cfg.lightning_max_strikes_per_event)
-        strikes_row.addWidget(self.strikes_spin)
-        panel_l.addLayout(strikes_row)
-
-        cooldown_row = QHBoxLayout()
-        cooldown_row.addWidget(QLabel("Lightning cooldown steps:"))
-        self.cooldown_spin = QSpinBox()
-        self.cooldown_spin.setRange(0, 500)
-        self.cooldown_spin.setValue(self.cfg.lightning_cooldown_steps)
-        cooldown_row.addWidget(self.cooldown_spin)
-        panel_l.addLayout(cooldown_row)
-
-        # Speed
-        sp_row = QWidget()
-        sp_l = QHBoxLayout(sp_row)
-        sp_l.setContentsMargins(0, 0, 0, 0)
-        self.speed_lab = QLabel("Speed (ms): 60")
-        self.speed_slider = QSlider(Qt.Horizontal)
-        self.speed_slider.setMinimum(10)
-        self.speed_slider.setMaximum(300)
-        self.speed_slider.setValue(60)
-        sp_l.addWidget(self.speed_lab, 1)
-        sp_l.addWidget(self.speed_slider, 4)
-        panel_l.addWidget(sp_row)
-
-        self.stats = QLabel("Step: 0")
-        panel_l.addWidget(self.stats)
-        panel_l.addStretch(1)
-
-        # Timer
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.on_tick)
-
-        # Signals
-        self.btn_start.clicked.connect(self.on_start)
-        self.btn_pause.clicked.connect(self.on_pause)
-        self.btn_step.clicked.connect(self.on_step)
-        self.btn_reset.clicked.connect(self.on_reset)
-        self.btn_apply_size.clicked.connect(self.on_apply_size)
-
-        self.f_slider.valueChanged.connect(self.on_params_changed)
-        self.speed_slider.valueChanged.connect(self.on_speed_changed)
-
-        self.chk_lightning.toggled.connect(self.on_lightning_toggled)
-        self.strikes_spin.valueChanged.connect(self.on_lightning_event_params_changed)
-        self.cooldown_spin.valueChanged.connect(self.on_lightning_event_params_changed)
-
-        self.chk_wind.toggled.connect(self.on_wind_toggled)
-        self.cmb_wind.currentTextChanged.connect(self.on_wind_dir_changed)
-        self.wind_slider.valueChanged.connect(self.on_wind_strength_changed)
-
-        self.hum_slider.valueChanged.connect(self.on_humidity_changed)
-        self.temp_slider.valueChanged.connect(self.on_temperature_changed)
-
-        self.conif_slider.valueChanged.connect(self.on_conifer_ratio_changed)
-        self.flamm_d_slider.valueChanged.connect(self.on_flammability_changed)
-        self.flamm_c_slider.valueChanged.connect(self.on_flammability_changed)
-
-        self.grid_widget.cell_painted.connect(self.on_cell_painted)
-
-        # First render
-        self.grid_widget.set_grid(self.ca.grid)
-        self._update_f_label_and_state()
-
-    # ---- Simulation controls ----
-
-    def on_start(self):
-        self.run_has_seen_fire = self.ca.has_active_fire()
-
-        # Якщо взагалі немає шансів ні на активний вогонь, ні на блискавку — не стартуємо
-        if not self.ca.has_active_fire() and (not self.cfg.lightning_enabled or self.cfg.f <= 0.0):
-            self.statusBar().showMessage(
-                "Немає активного займання і блискавка вимкнена.",
-                2500
-            )
-            return
-
-        self.timer.start(self.speed_slider.value())
-
-    def on_pause(self):
-        self.timer.stop()
-
-    def on_step(self):
-        self.on_tick()
-
-    def on_reset(self):
-        self.timer.stop()
-        self.ca.reset()
-        self.run_has_seen_fire = False
-        self.grid_widget.set_grid(self.ca.grid)
-        self.stats.setText(f"Step: {self.ca.step_count}")
-
-    def on_apply_size(self):
-        self.timer.stop()
-        self.cfg.width = int(self.w_spin.value())
-        self.cfg.height = int(self.h_spin.value())
-        self.ca = ForestFireCA(self.cfg)
-        self.run_has_seen_fire = False
-        self.grid_widget.set_grid(self.ca.grid)
-        self.stats.setText(f"Step: {self.ca.step_count}")
-
-    def on_tick(self):
-        self.ca.step()
-        self.grid_widget.set_grid(self.ca.grid)
-        self.stats.setText(f"Step: {self.ca.step_count}")
-
-        if self.ca.has_active_fire():
-            self.run_has_seen_fire = True
-
-        # Один запуск = один інцидент:
-        # якщо пожежа вже була і тепер повністю згасла, зупиняємо симуляцію
-        if self.run_has_seen_fire and not self.ca.has_active_fire():
-            self.timer.stop()
-            self.statusBar().showMessage("Пожежний інцидент завершився.", 2500)
-
-    # ---- Painting / tools ----
-
-    def on_cell_painted(self, row: int, col: int, button: int):
-        if self.timer.isActive():
-            self.statusBar().showMessage("Натисни Pause, щоб редагувати карту.", 1200)
-            return
-
-        if button == Qt.RightButton.value:
-            self.ca.set_empty(row, col)
-            self.grid_widget.set_grid(self.ca.grid)
-            return
-
-        tool = self.tool_combo.currentText()
-
-        if tool == "Ignite":
-            self.ca.ignite(row, col)
-        elif tool == "Plant decid":
-            self.ca.plant_decid(row, col)
-        elif tool == "Plant conif":
-            self.ca.plant_conif(row, col)
-        elif tool == "Barrier":
-            self.ca.set_barrier(row, col, True)
-        elif tool == "Erase":
-            self.ca.set_empty(row, col)
-
-        self.grid_widget.set_grid(self.ca.grid)
-
-    # ---- Params ----
-
-    def on_params_changed(self):
-        self.cfg.f = float(self.f_to_float(self.f_slider.value()))
-        self._update_f_label_and_state()
-
-    def on_lightning_event_params_changed(self):
-        self.cfg.lightning_max_strikes_per_event = int(self.strikes_spin.value())
-        self.cfg.lightning_cooldown_steps = int(self.cooldown_spin.value())
-
-    def on_speed_changed(self, v: int):
-        self.speed_lab.setText(f"Speed (ms): {v}")
-        if self.timer.isActive():
-            self.timer.start(v)
-
-    def on_lightning_toggled(self, checked: bool):
-        self.cfg.lightning_enabled = bool(checked)
-        self._update_f_label_and_state()
-
-    def on_wind_toggled(self, checked: bool):
-        self.cfg.wind_enabled = bool(checked)
-        self.cmb_wind.setEnabled(self.cfg.wind_enabled)
-        self.wind_slider.setEnabled(self.cfg.wind_enabled)
-
-    def on_wind_dir_changed(self, text: str):
-        self.cfg.wind_dir = text
-
-    def on_wind_strength_changed(self, v: int):
-        self.cfg.wind_strength = v / 100.0
-        self.wind_lab.setText(f"Wind strength: {self.cfg.wind_strength:.2f}")
-
-    def on_humidity_changed(self, v: int):
-        self.cfg.humidity = v / 100.0
-        self.hum_lab.setText(f"Humidity: {self.cfg.humidity:.2f}")
-
-    def on_temperature_changed(self, v: int):
-        self.cfg.temperature_c = float(v)
-        self.temp_lab.setText(f"Temperature: {v} °C")
-
-    def on_conifer_ratio_changed(self, v: int):
-        self.cfg.conifer_ratio = v / 100.0
-        self.conif_lab.setText(f"Conifer ratio: {self.cfg.conifer_ratio:.2f}")
-
-    def on_flammability_changed(self):
-        self.cfg.flamm_decid = float(self.flamm_d_to_float(self.flamm_d_slider.value()))
-        self.cfg.flamm_conif = float(self.flamm_c_to_float(self.flamm_c_slider.value()))
-        self.flamm_d_lab.setText(f"Flammability (decid): {self.cfg.flamm_decid:.4f}")
-        self.flamm_c_lab.setText(f"Flammability (conif): {self.cfg.flamm_conif:.4f}")
-
-    def _update_f_label_and_state(self):
-        self.f_slider.setEnabled(self.cfg.lightning_enabled)
-        self.strikes_spin.setEnabled(self.cfg.lightning_enabled)
-        self.cooldown_spin.setEnabled(self.cfg.lightning_enabled)
-
-        status = "ON" if self.cfg.lightning_enabled else "OFF"
-        eff = self.cfg.f if self.cfg.lightning_enabled else 0.0
-        self.f_lab.setText(f"Lightning event probability: {self.cfg.f:.4f} | effective: {eff:.4f} ({status})")
+        self.statusBar().showMessage("Готово до редагування карти.")
