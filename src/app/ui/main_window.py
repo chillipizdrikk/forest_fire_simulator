@@ -1,24 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
-    QFrame,
-    QGridLayout,
-    QGroupBox,
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QPushButton,
-    QScrollArea,
-    QSlider,
-    QSpinBox,
-    QTabWidget,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QVBoxLayout, QWidget
 
 from src.app.core.ca import (
     BARRIER,
@@ -30,41 +14,11 @@ from src.app.core.ca import (
     TREE_CONIF,
     TREE_DECID,
 )
+from src.app.ui.bindings import connect_main_window_signals
 from src.app.ui.grid_widget import GridWidget
-
-
-def slider_float(label: str, min_v: float, max_v: float, init: float, steps: int = 1000):
-    row = QWidget()
-    layout = QVBoxLayout(row)
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(6)
-
-    head = QHBoxLayout()
-    head.setContentsMargins(0, 0, 0, 0)
-    title = QLabel(label)
-    title.setObjectName("FieldLabel")
-    value = QLabel(f"{init:.4f}")
-    value.setObjectName("ValueBadge")
-    head.addWidget(title)
-    head.addStretch(1)
-    head.addWidget(value)
-
-    slider = QSlider(Qt.Horizontal)
-    slider.setMinimum(0)
-    slider.setMaximum(steps)
-    slider.setMinimumHeight(24)
-
-    def to_slider(x):
-        return int((x - min_v) / (max_v - min_v) * steps)
-
-    def to_float(v):
-        return min_v + (max_v - min_v) * (v / steps)
-
-    slider.setValue(to_slider(init))
-
-    layout.addLayout(head)
-    layout.addWidget(slider)
-    return row, title, value, slider, to_float
+from src.app.ui.panels import build_all_controls, build_controls_tabs, build_legend_card, build_stats_card
+from src.app.ui.panels.common import create_card
+from src.app.ui.styles import apply_main_window_styles
 
 
 class MainWindow(QMainWindow):
@@ -97,279 +51,10 @@ class MainWindow(QMainWindow):
         self.ca = ForestFireCA(self.cfg)
         self.run_has_seen_fire = False
 
-        self._apply_styles()
+        apply_main_window_styles(self)
         self._build_ui()
-        self._connect_signals()
+        connect_main_window_signals(self)
         self._sync_initial_state()
-
-    def _apply_styles(self):
-        self.setStyleSheet(
-            """
-            QMainWindow {
-                background: #0b1220;
-                color: #e5eefc;
-            }
-
-            QWidget {
-                color: #e5eefc;
-            }
-
-            QLabel#Title {
-                font-size: 26px;
-                font-weight: 700;
-                color: #f8fafc;
-            }
-
-            QLabel#Subtitle {
-                font-size: 13px;
-                color: #9fb1c9;
-            }
-
-            QLabel#SectionTitle {
-                font-size: 15px;
-                font-weight: 700;
-                color: #f8fafc;
-            }
-
-            QLabel#FieldLabel {
-                color: #cbd5e1;
-                font-weight: 600;
-            }
-
-            QLabel#ValueBadge {
-                background: #1e293b;
-                border: 1px solid #334155;
-                border-radius: 8px;
-                padding: 4px 8px;
-                color: #f8fafc;
-                font-weight: 600;
-                min-width: 72px;
-            }
-
-            QLabel#Hint, QLabel#LegendLabel {
-                color: #94a3b8;
-            }
-
-            QLabel#StatValue {
-                font-size: 20px;
-                font-weight: 700;
-                color: #f8fafc;
-            }
-
-            QLabel#StatCaption {
-                color: #94a3b8;
-                font-size: 12px;
-            }
-
-            QFrame#Card, QGroupBox {
-                background-color: #111827;
-                border: 1px solid #243244;
-                border-radius: 16px;
-            }
-
-            QGroupBox {
-                margin-top: 16px;
-                padding: 18px 16px 16px 16px;
-                font-weight: 700;
-            }
-
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 14px;
-                padding: 0 6px;
-                color: #f8fafc;
-            }
-
-            QPushButton {
-                background-color: #1d4ed8;
-                border: 1px solid #3b82f6;
-                border-radius: 10px;
-                padding: 10px 14px;
-                color: white;
-                font-weight: 600;
-                min-height: 18px;
-            }
-
-            QPushButton:hover {
-                background-color: #2563eb;
-                border: 1px solid #60a5fa;
-            }
-
-            QPushButton:pressed {
-                background-color: #1e40af;
-                border: 1px solid #93c5fd;
-            }
-
-            QPushButton#SecondaryBtn {
-                background-color: #1f2937;
-                border: 1px solid #334155;
-                color: #f8fafc;
-            }
-
-            QPushButton#SecondaryBtn:hover {
-                background-color: #273449;
-                border: 1px solid #475569;
-            }
-
-            QPushButton#DangerBtn {
-                background-color: #7f1d1d;
-                border: 1px solid #b91c1c;
-                color: white;
-            }
-
-            QPushButton#DangerBtn:hover {
-                background-color: #991b1b;
-                border: 1px solid #ef4444;
-            }
-
-            QComboBox, QSpinBox {
-                background-color: #0f172a;
-                border: 1px solid #334155;
-                border-radius: 10px;
-                padding: 8px 10px;
-                min-height: 20px;
-                color: #f8fafc;
-                selection-background-color: #1d4ed8;
-                selection-color: white;
-            }
-
-            QComboBox:hover, QSpinBox:hover {
-                border: 1px solid #475569;
-            }
-
-            QComboBox:focus, QSpinBox:focus {
-                border: 1px solid #60a5fa;
-            }
-
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 28px;
-                border: none;
-                background-color: #162033;
-                border-top-right-radius: 10px;
-                border-bottom-right-radius: 10px;
-            }
-
-            QComboBox::down-arrow {
-                width: 10px;
-                height: 10px;
-            }
-
-            QComboBox QAbstractItemView {
-                background-color: #0f172a;
-                color: #f8fafc;
-                border: 1px solid #334155;
-                outline: 0px;
-                selection-background-color: #2563eb;
-                selection-color: white;
-            }
-
-            QSpinBox::up-button, QSpinBox::down-button {
-                border: none;
-                width: 24px;
-                background-color: #162033;
-            }
-
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-                background-color: #1d2940;
-            }
-
-            QSlider {
-                min-height: 24px;
-            }
-
-            QSlider::groove:horizontal {
-                border: none;
-                height: 8px;
-                border-radius: 4px;
-                background: #334155;
-                margin: 0 2px;
-            }
-
-            QSlider::handle:horizontal {
-                background: #60a5fa;
-                border: 2px solid #dbeafe;
-                width: 14px;
-                height: 14px;
-                margin: -4px 0;
-                border-radius: 9px;
-            }
-
-            QSlider::sub-page:horizontal {
-                background: #3b82f6;
-                border-radius: 4px;
-            }
-
-            QCheckBox {
-                spacing: 10px;
-                color: #e2e8f0;
-            }
-
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-                border-radius: 5px;
-                border: 1px solid #475569;
-                background-color: #0f172a;
-            }
-
-            QCheckBox::indicator:hover {
-                border: 1px solid #60a5fa;
-            }
-
-            QCheckBox::indicator:checked {
-                background-color: #1d4ed8;
-                border: 1px solid #93c5fd;
-            }
-
-            QCheckBox::indicator:checked::after {
-                color: white;
-            }
-
-            QScrollArea {
-                border: none;
-                background-color: transparent;
-            }
-
-            QScrollArea > QWidget > QWidget {
-                background-color: transparent;
-            }
-
-            QTabWidget::pane {
-                border: 1px solid #243244;
-                background-color: #111827;
-                border-radius: 16px;
-                top: -1px;
-            }
-
-            QTabBar::tab {
-                background-color: #0f172a;
-                color: #cbd5e1;
-                border: 1px solid #243244;
-                padding: 10px 14px;
-                margin-right: 6px;
-                border-top-left-radius: 10px;
-                border-top-right-radius: 10px;
-                min-width: 96px;
-            }
-
-            QTabBar::tab:selected {
-                background-color: #111827;
-                color: #f8fafc;
-                border-bottom-color: #111827;
-            }
-
-            QTabBar::tab:hover:!selected {
-                background-color: #162033;
-            }
-
-            QStatusBar {
-                background-color: #0f172a;
-                color: #cbd5e1;
-            }
-            """
-        )
 
     def _build_ui(self):
         central = QWidget()
@@ -382,17 +67,16 @@ class MainWindow(QMainWindow):
         left_col.setSpacing(14)
         root.addLayout(left_col, 5)
 
-        header_card = self._create_card()
+        header_card = create_card()
         header_layout = QVBoxLayout(header_card)
         header_layout.setSpacing(8)
 
         title = QLabel("Forest Fire Cellular Automata Simulator")
         title.setObjectName("Title")
-
         header_layout.addWidget(title)
         left_col.addWidget(header_card)
 
-        self.sim_card = self._create_card()
+        self.sim_card = create_card()
         sim_layout = QVBoxLayout(self.sim_card)
         sim_layout.setSpacing(14)
 
@@ -420,10 +104,10 @@ class MainWindow(QMainWindow):
 
         self.grid_widget = GridWidget()
         sim_layout.addWidget(self.grid_widget, 1)
-        sim_layout.addWidget(self._build_legend())
+        sim_layout.addWidget(build_legend_card())
         left_col.addWidget(self.sim_card, 1)
 
-        self.right_card = self._create_card()
+        self.right_card = create_card()
         self.right_card.setMinimumWidth(430)
         self.right_card.setMaximumWidth(500)
         root.addWidget(self.right_card, 2)
@@ -436,73 +120,13 @@ class MainWindow(QMainWindow):
         side_title.setObjectName("SectionTitle")
         right_layout.addWidget(side_title)
 
-        self._build_stats_card()
+        build_stats_card(self)
         right_layout.addWidget(self.stats_card)
 
-        self.tabs = QTabWidget()
-        right_layout.addWidget(self.tabs, 1)
-
-        self.tab_general = self._make_tab_page()
-        self.tab_environment = self._make_tab_page()
-        self.tab_advanced = self._make_tab_page()
-
-        self.tabs.addTab(self.tab_general["scroll"], "General")
-        self.tabs.addTab(self.tab_environment["scroll"], "Environment")
-        self.tabs.addTab(self.tab_advanced["scroll"], "Advanced")
-
-        self.general_layout = self.tab_general["layout"]
-        self.environment_layout = self.tab_environment["layout"]
-        self.advanced_layout = self.tab_advanced["layout"]
-
-        self._build_controls_card()
-        self._build_environment_group()
-        self._build_rain_group()
-        self._build_vegetation_group()
-        self._build_lightning_group()
-
-        self.general_layout.addStretch(1)
-        self.environment_layout.addStretch(1)
-        self.advanced_layout.addStretch(1)
+        build_controls_tabs(self, right_layout)
+        build_all_controls(self)
 
         self.statusBar().showMessage("Готово до редагування карти.")
-
-    def _connect_signals(self):
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.on_tick)
-
-        self.btn_start.clicked.connect(self.on_start)
-        self.btn_pause.clicked.connect(self.on_pause)
-        self.btn_step.clicked.connect(self.on_step)
-        self.btn_reset.clicked.connect(self.on_reset)
-        self.btn_apply_size.clicked.connect(self.on_apply_size)
-
-        self.f_slider.valueChanged.connect(self.on_params_changed)
-        self.speed_slider.valueChanged.connect(self.on_speed_changed)
-
-        self.chk_lightning.toggled.connect(self.on_lightning_toggled)
-        self.strikes_spin.valueChanged.connect(self.on_lightning_event_params_changed)
-        self.cooldown_spin.valueChanged.connect(self.on_lightning_event_params_changed)
-
-        self.chk_wind.toggled.connect(self.on_wind_toggled)
-        self.cmb_wind.currentTextChanged.connect(self.on_wind_dir_changed)
-        self.wind_slider.valueChanged.connect(self.on_wind_strength_changed)
-
-        self.hum_slider.valueChanged.connect(self.on_humidity_changed)
-        self.temp_slider.valueChanged.connect(self.on_temperature_changed)
-
-        self.chk_rain.toggled.connect(self.on_rain_toggled)
-        self.rain_slider.valueChanged.connect(self.on_rain_intensity_changed)
-
-        self.chk_rain_scenario.toggled.connect(self.on_rain_scenario_toggled)
-        self.rain_scen_slider.valueChanged.connect(self.on_rain_scenario_intensity_changed)
-        self.rain_start_spin.valueChanged.connect(self.on_rain_scenario_steps_changed)
-        self.rain_end_spin.valueChanged.connect(self.on_rain_scenario_steps_changed)
-
-        self.conif_slider.valueChanged.connect(self.on_conifer_ratio_changed)
-        self.flamm_d_slider.valueChanged.connect(self.on_flammability_changed)
-        self.flamm_c_slider.valueChanged.connect(self.on_flammability_changed)
-
-        self.grid_widget.cell_painted.connect(self.on_cell_painted)
 
     def _sync_initial_state(self):
         self.grid_widget.set_grid(self.ca.grid)
@@ -510,334 +134,6 @@ class MainWindow(QMainWindow):
         self._update_rain_status()
         self._update_stats()
         self.on_wind_toggled(self.cfg.wind_enabled)
-
-    def _build_stats_card(self):
-        self.stats_card = self._create_card()
-        layout = QVBoxLayout(self.stats_card)
-        layout.setSpacing(12)
-
-        title = QLabel("Overview")
-        title.setObjectName("SectionTitle")
-        layout.addWidget(title)
-
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(12)
-
-        self.step_card, self.step_value = self._stat_card("0", "Simulation step")
-        self.fire_card, self.fire_value = self._stat_card("0", "Burning cells")
-        self.tree_card, self.tree_value = self._stat_card("0", "Living trees")
-        self.rain_card, self.rain_value = self._stat_card("OFF", "Rain now")
-
-        cards = [
-            self.step_card,
-            self.fire_card,
-            self.tree_card,
-            self.rain_card,
-        ]
-
-        for i, stat_card in enumerate(cards):
-            grid.addWidget(stat_card, i // 2, i % 2)
-
-        layout.addLayout(grid)
-
-    def _build_controls_card(self):
-        card = self._create_card()
-        layout = QVBoxLayout(card)
-        layout.setSpacing(14)
-
-        title = QLabel("Map and playback")
-        title.setObjectName("SectionTitle")
-        layout.addWidget(title)
-
-        row = QHBoxLayout()
-        self.tool_combo = QComboBox()
-        self.tool_combo.addItems(["Ignite", "Plant decid", "Plant conif", "Barrier", "Erase"])
-        self.tool_combo.setCurrentText("Ignite")
-        row.addWidget(self._labeled_widget("Tool", self.tool_combo), 1)
-        layout.addLayout(row)
-
-        btn_row = QGridLayout()
-        btn_row.setHorizontalSpacing(10)
-        btn_row.setVerticalSpacing(10)
-        self.btn_start = QPushButton("Start")
-        self.btn_pause = QPushButton("Pause")
-        self.btn_pause.setObjectName("SecondaryBtn")
-        self.btn_step = QPushButton("Step")
-        self.btn_step.setObjectName("SecondaryBtn")
-        self.btn_reset = QPushButton("Reset map")
-        self.btn_reset.setObjectName("DangerBtn")
-        btn_row.addWidget(self.btn_start, 0, 0)
-        btn_row.addWidget(self.btn_pause, 0, 1)
-        btn_row.addWidget(self.btn_step, 1, 0)
-        btn_row.addWidget(self.btn_reset, 1, 1)
-        layout.addLayout(btn_row)
-
-        size_row = QHBoxLayout()
-        self.w_spin = QSpinBox()
-        self.h_spin = QSpinBox()
-        self.w_spin.setRange(10, 500)
-        self.h_spin.setRange(10, 500)
-        self.w_spin.setValue(self.cfg.width)
-        self.h_spin.setValue(self.cfg.height)
-        self.btn_apply_size = QPushButton("Apply size")
-        self.btn_apply_size.setObjectName("SecondaryBtn")
-        size_row.addWidget(self._labeled_widget("Width", self.w_spin), 1)
-        size_row.addWidget(self._labeled_widget("Height", self.h_spin), 1)
-        layout.addLayout(size_row)
-        layout.addWidget(self.btn_apply_size)
-
-        speed_row = QWidget()
-        speed_layout = QVBoxLayout(speed_row)
-        speed_layout.setContentsMargins(0, 0, 0, 0)
-        speed_layout.setSpacing(6)
-        speed_head = QHBoxLayout()
-        speed_title = QLabel("Playback speed")
-        speed_title.setObjectName("FieldLabel")
-        self.speed_lab = QLabel("60 ms")
-        self.speed_lab.setObjectName("ValueBadge")
-        speed_head.addWidget(speed_title)
-        speed_head.addStretch(1)
-        speed_head.addWidget(self.speed_lab)
-        self.speed_slider = QSlider(Qt.Horizontal)
-        self.speed_slider.setRange(10, 300)
-        self.speed_slider.setValue(60)
-        speed_layout.addLayout(speed_head)
-        speed_layout.addWidget(self.speed_slider)
-        layout.addWidget(speed_row)
-
-        self.general_layout.addWidget(card)
-
-    def _build_environment_group(self):
-        group = QGroupBox("Environment")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(12)
-
-        self.chk_wind = QCheckBox("Enable wind")
-        self.chk_wind.setChecked(self.cfg.wind_enabled)
-        layout.addWidget(self.chk_wind)
-
-        self.cmb_wind = QComboBox()
-        self.cmb_wind.addItems(["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
-        self.cmb_wind.setCurrentText(self.cfg.wind_dir)
-        layout.addWidget(self._labeled_widget("Wind direction", self.cmb_wind))
-
-        self.wind_lab, self.wind_slider = self._slider_row(layout, "Wind strength", int(self.cfg.wind_strength * 100), "{:.2f}", scale=100)
-        self.hum_lab, self.hum_slider = self._slider_row(layout, "Humidity", int(self.cfg.humidity * 100), "{:.2f}", scale=100)
-
-        temp_widget = QWidget()
-        temp_layout = QVBoxLayout(temp_widget)
-        temp_layout.setContentsMargins(0, 0, 0, 0)
-        temp_layout.setSpacing(6)
-        head = QHBoxLayout()
-        title = QLabel("Temperature")
-        title.setObjectName("FieldLabel")
-        self.temp_lab = QLabel(f"{int(self.cfg.temperature_c)} °C")
-        self.temp_lab.setObjectName("ValueBadge")
-        head.addWidget(title)
-        head.addStretch(1)
-        head.addWidget(self.temp_lab)
-        self.temp_slider = QSlider(Qt.Horizontal)
-        self.temp_slider.setRange(-10, 40)
-        self.temp_slider.setValue(int(self.cfg.temperature_c))
-        temp_layout.addLayout(head)
-        temp_layout.addWidget(self.temp_slider)
-        layout.addWidget(temp_widget)
-
-        self.environment_layout.addWidget(group)
-
-    def _build_rain_group(self):
-        group = QGroupBox("Rain settings")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(12)
-
-        self.chk_rain = QCheckBox("Manual rain")
-        self.chk_rain.setChecked(self.cfg.rain_enabled)
-        layout.addWidget(self.chk_rain)
-        self.rain_lab, self.rain_slider = self._slider_row(layout, "Rain intensity", int(self.cfg.rain_intensity * 100), "{:.2f}", scale=100)
-
-        divider = QFrame()
-        divider.setFrameShape(QFrame.HLine)
-        divider.setStyleSheet("background:#243244; max-height:1px; border:none;")
-        layout.addWidget(divider)
-
-        self.chk_rain_scenario = QCheckBox("Automatic rain scenario")
-        self.chk_rain_scenario.setChecked(self.cfg.rain_scenario_enabled)
-        layout.addWidget(self.chk_rain_scenario)
-        self.rain_scen_lab, self.rain_scen_slider = self._slider_row(layout, "Scenario intensity", int(self.cfg.rain_scenario_intensity * 100), "{:.2f}", scale=100)
-
-        steps_row = QHBoxLayout()
-        self.rain_start_spin = QSpinBox()
-        self.rain_end_spin = QSpinBox()
-        self.rain_start_spin.setRange(0, 100000)
-        self.rain_end_spin.setRange(0, 100000)
-        self.rain_start_spin.setValue(self.cfg.rain_scenario_start_step)
-        self.rain_end_spin.setValue(self.cfg.rain_scenario_end_step)
-        steps_row.addWidget(self._labeled_widget("Start step", self.rain_start_spin), 1)
-        steps_row.addWidget(self._labeled_widget("End step", self.rain_end_spin), 1)
-        layout.addLayout(steps_row)
-
-        self.rain_status_lab = QLabel("Rain active now: OFF")
-        self.rain_status_lab.setObjectName("Hint")
-        layout.addWidget(self.rain_status_lab)
-        self.environment_layout.addWidget(group)
-
-    def _build_vegetation_group(self):
-        group = QGroupBox("Vegetation")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(12)
-
-        self.conif_lab, self.conif_slider = self._slider_row(layout, "Conifer ratio", int(self.cfg.conifer_ratio * 100), "{:.2f}", scale=100)
-        d_row, _, self.flamm_d_value, self.flamm_d_slider, self.flamm_d_to_float = slider_float(
-            "Flammability (deciduous)", 0.0, 2.0, self.cfg.flamm_decid
-        )
-        c_row, _, self.flamm_c_value, self.flamm_c_slider, self.flamm_c_to_float = slider_float(
-            "Flammability (coniferous)", 0.0, 2.0, self.cfg.flamm_conif
-        )
-        layout.addWidget(d_row)
-        layout.addWidget(c_row)
-        self.advanced_layout.addWidget(group)
-
-    def _build_lightning_group(self):
-        group = QGroupBox("Lightning")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(12)
-
-        self.chk_lightning = QCheckBox("Enable lightning events")
-        self.chk_lightning.setChecked(self.cfg.lightning_enabled)
-        layout.addWidget(self.chk_lightning)
-
-        f_row, _, self.f_value, self.f_slider, self.f_to_float = slider_float(
-            "Event probability", 0.0, 0.20, self.cfg.f
-        )
-        layout.addWidget(f_row)
-
-        steps_row = QHBoxLayout()
-        self.strikes_spin = QSpinBox()
-        self.cooldown_spin = QSpinBox()
-        self.strikes_spin.setRange(1, 20)
-        self.cooldown_spin.setRange(0, 500)
-        self.strikes_spin.setValue(self.cfg.lightning_max_strikes_per_event)
-        self.cooldown_spin.setValue(self.cfg.lightning_cooldown_steps)
-        steps_row.addWidget(self._labeled_widget("Max strikes", self.strikes_spin), 1)
-        steps_row.addWidget(self._labeled_widget("Cooldown", self.cooldown_spin), 1)
-        layout.addLayout(steps_row)
-
-        self.lightning_status = QLabel("")
-        self.lightning_status.setObjectName("Hint")
-        layout.addWidget(self.lightning_status)
-        self.advanced_layout.addWidget(group)
-
-    def _build_legend(self):
-        card = self._create_card()
-        layout = QHBoxLayout(card)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(14)
-        items = [
-            ("#091017", "Empty"),
-            ("#46b060", "Deciduous"),
-            ("#1c7849", "Coniferous"),
-            ("#ff8429", "Fire"),
-            ("#94a3b8", "Barrier"),
-            ("#6e4c34", "Burnt"),
-        ]
-        for color, text in items:
-            item = QWidget()
-            row = QHBoxLayout(item)
-            row.setContentsMargins(0, 0, 0, 0)
-            row.setSpacing(8)
-            swatch = QLabel()
-            swatch.setFixedSize(14, 14)
-            swatch.setStyleSheet(f"background:{color}; border-radius:7px; border:1px solid #475569;")
-            label = QLabel(text)
-            label.setObjectName("LegendLabel")
-            row.addWidget(swatch)
-            row.addWidget(label)
-            layout.addWidget(item)
-        layout.addStretch(1)
-        return card
-
-    def _create_card(self):
-        card = QFrame()
-        card.setObjectName("Card")
-        return card
-    
-    def _make_tab_page(self):
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-
-        content = QWidget()
-        content.setStyleSheet("background: #111827;")
-        scroll.setWidget(content)
-
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(4, 6, 4, 6)
-        layout.setSpacing(14)
-
-        return {
-            "scroll": scroll,
-            "content": content,
-            "layout": layout,
-        }
-
-    def _labeled_widget(self, text: str, widget: QWidget):
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
-        label = QLabel(text)
-        label.setObjectName("FieldLabel")
-        layout.addWidget(label)
-        layout.addWidget(widget)
-        return container
-
-    def _slider_row(self, parent_layout: QVBoxLayout, text: str, value: int, fmt: str, scale: int = 1):
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-
-        head = QHBoxLayout()
-        head.setContentsMargins(0, 0, 0, 0)
-
-        title = QLabel(text)
-        title.setObjectName("FieldLabel")
-
-        value_label = QLabel(fmt.format(value / scale))
-        value_label.setObjectName("ValueBadge")
-
-        head.addWidget(title)
-        head.addStretch(1)
-        head.addWidget(value_label)
-
-        slider = QSlider(Qt.Horizontal)
-        slider.setRange(0, 100)
-        slider.setValue(value)
-        slider.setMinimumHeight(24)
-
-        layout.addLayout(head)
-        layout.addWidget(slider)
-
-        parent_layout.addWidget(container)
-        return value_label, slider
-
-    def _stat_card(self, value: str, caption: str):
-        card = self._create_card()
-
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(4)
-
-        value_label = QLabel(value)
-        value_label.setObjectName("StatValue")
-
-        caption_label = QLabel(caption)
-        caption_label.setObjectName("StatCaption")
-
-        layout.addWidget(value_label)
-        layout.addWidget(caption_label)
-
-        return card, value_label
 
     def _cell_counts(self):
         g = self.ca.grid
@@ -1025,3 +321,16 @@ class MainWindow(QMainWindow):
         self.f_value.setText(f"{self.cfg.f:.4f}")
         state = "ON" if self.cfg.lightning_enabled else "OFF"
         self.lightning_status.setText(f"Lightning: {state} | effective probability: {eff:.4f}")
+
+    def get_cell_color(self, state: int) -> QColor:
+        if state == TREE_DECID:
+            return QColor("#46b060")
+        if state == TREE_CONIF:
+            return QColor("#1c7849")
+        if state in BURNING_STATES:
+            return QColor("#ff8429")
+        if state == BURNT:
+            return QColor("#6e4c34")
+        if state == BARRIER:
+            return QColor("#94a3b8")
+        return QColor("#091017")
