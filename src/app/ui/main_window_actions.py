@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import numpy as np
 from PySide6.QtCore import Qt
 
-from src.app.core.ca import CAConfig, ForestFireCA
+from src.app.core.ca import CAConfig, ForestFireCA, TREE_CONIF, TREE_DECID
 
 
 class MainWindowActionsMixin:
     def on_start(self):
         self.run_has_seen_fire = self.ca.has_active_fire()
+        has_trees = bool(np.any((self.ca.grid == TREE_DECID) | (self.ca.grid == TREE_CONIF)))
+
+        if not has_trees:
+            self.statusBar().showMessage("На карті немає дерев для симуляції.", 3500)
+            return
 
         if not self.ca.has_active_fire() and (not self.cfg.lightning_enabled or self.cfg.f <= 0.0):
             self.statusBar().showMessage("Немає активного займання, а блискавка вимкнена або має нульову ймовірність.", 3500)
@@ -49,10 +55,26 @@ class MainWindowActionsMixin:
         self._update_rain_status()
         self._update_stats()
 
-        if self.ca.has_active_fire():
+        has_active_fire = self.ca.has_active_fire()
+        has_trees = bool(np.any((self.ca.grid == TREE_DECID) | (self.ca.grid == TREE_CONIF)))
+        has_future_ignition_sources = self.cfg.lightning_enabled and self.cfg.f > 0.0
+
+        if has_active_fire:
             self.run_has_seen_fire = True
 
-        if self.run_has_seen_fire and not self.ca.has_active_fire():
+        if self.timer.isActive() and not has_trees:
+            self.timer.stop()
+            self._update_stats()
+            self.statusBar().showMessage("На карті більше немає дерев. Симуляцію зупинено.", 2500)
+            return
+
+        if self.timer.isActive() and not has_active_fire and not has_future_ignition_sources:
+            self.timer.stop()
+            self._update_stats()
+            self.statusBar().showMessage("Активного вогню немає і нові займання неможливі. Симуляцію зупинено.", 2500)
+            return
+
+        if self.run_has_seen_fire and not has_active_fire:
             self.timer.stop()
             self._update_stats()
             self.statusBar().showMessage("Пожежний інцидент завершився.", 2500)
@@ -153,8 +175,18 @@ class MainWindowActionsMixin:
         self._update_stats()
 
     def on_rain_scenario_steps_changed(self):
-        self.cfg.rain_scenario_start_step = int(self.rain_start_spin.value())
-        self.cfg.rain_scenario_end_step = int(self.rain_end_spin.value())
+        start_step = int(self.rain_start_spin.value())
+        end_step = int(self.rain_end_spin.value())
+
+        if start_step >= end_step:
+            end_step = start_step + 1
+            self.rain_end_spin.blockSignals(True)
+            self.rain_end_spin.setValue(end_step)
+            self.rain_end_spin.blockSignals(False)
+            self.statusBar().showMessage("Rain scenario range auto-corrected: End was set to Start + 1.", 3000)
+
+        self.cfg.rain_scenario_start_step = start_step
+        self.cfg.rain_scenario_end_step = end_step
         self._update_rain_status()
         self._update_stats()
 
