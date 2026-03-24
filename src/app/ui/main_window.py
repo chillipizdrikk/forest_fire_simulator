@@ -301,36 +301,30 @@ class MainWindow(QMainWindow):
                 border-radius: 4px;
             }
 
-            # QCheckBox {
-            #     spacing: 10px;
-            #     color: #e2e8f0;
-            # }
-
-            # QCheckBox::indicator {
-            #     width: 18px;
-            #     height: 18px;
-            #     border-radius: 5px;
-            #     border: 1px solid #475569;
-            #     background-color: #0f172a;
-            # }
-
-            # QCheckBox::indicator:hover {
-            #     border: 1px solid #60a5fa;
-            # }
-
-            # QCheckBox::indicator:checked {
-            #     background-color: #1d4ed8;
-            #     border: 1px solid #93c5fd;
-            # }
-
-            # QCheckBox::indicator:checked::after {
-            #     color: white;
-            # }
-
             QCheckBox {
-                spacing: 8px;
+                spacing: 10px;
                 color: #e2e8f0;
-                background: transparent;
+            }
+
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border-radius: 5px;
+                border: 1px solid #475569;
+                background-color: #0f172a;
+            }
+
+            QCheckBox::indicator:hover {
+                border: 1px solid #60a5fa;
+            }
+
+            QCheckBox::indicator:checked {
+                background-color: #1d4ed8;
+                border: 1px solid #93c5fd;
+            }
+
+            QCheckBox::indicator:checked::after {
+                color: white;
             }
 
             QScrollArea {
