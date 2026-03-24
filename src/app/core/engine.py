@@ -54,6 +54,7 @@ class ForestFireCA:
         return grid
 
     def reset(self):
+        self.rng = np.random.default_rng(self.cfg.seed)
         self.grid = self._make_initial_grid()
         self.step_count = 0
         self._lightning_cooldown = 0

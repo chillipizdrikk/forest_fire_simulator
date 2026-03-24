@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
+from src.app.core.constants import BARRIER, BURNING1, BURNING2, BURNING3, BURNT, EMPTY, TREE_CONIF, TREE_DECID
 from src.app.ui.panels.common import create_card
+from src.app.utils.palette import PALETTE
+
+
+def _state_to_hex(state: int) -> str:
+    rgb = PALETTE[state]
+    return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
 
 
 def build_legend_card():
@@ -11,12 +18,14 @@ def build_legend_card():
     layout.setContentsMargins(14, 12, 14, 12)
     layout.setSpacing(14)
     items = [
-        ("#091017", "Empty"),
-        ("#46b060", "Deciduous"),
-        ("#1c7849", "Coniferous"),
-        ("#ff8429", "Fire"),
-        ("#94a3b8", "Barrier"),
-        ("#6e4c34", "Burnt"),
+         (_state_to_hex(EMPTY), "Empty"),
+        (_state_to_hex(TREE_DECID), "Deciduous"),
+        (_state_to_hex(TREE_CONIF), "Coniferous"),
+        (_state_to_hex(BURNING1), "Fire (Stage 1)"),
+        (_state_to_hex(BURNING2), "Fire (Stage 2)"),
+        (_state_to_hex(BURNING3), "Fire (Stage 3)"),
+        (_state_to_hex(BARRIER), "Barrier"),
+        (_state_to_hex(BURNT), "Burnt"),
     ]
     for color, text in items:
         item = QWidget()

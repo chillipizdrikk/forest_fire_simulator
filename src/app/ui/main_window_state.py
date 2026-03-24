@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from PySide6.QtGui import QColor
-
 from src.app.core.ca import BARRIER, BURNT, BURNING_STATES, EMPTY, TREE_CONIF, TREE_DECID
 
 
@@ -50,16 +48,3 @@ class MainWindowStateMixin:
         self.f_value.setText(f"{self.cfg.f:.4f}")
         state = "ON" if self.cfg.lightning_enabled else "OFF"
         self.lightning_status.setText(f"Lightning: {state} | effective probability: {effective:.4f}")
-
-    def get_cell_color(self, state: int) -> QColor:
-        if state == TREE_DECID:
-            return QColor("#46b060")
-        if state == TREE_CONIF:
-            return QColor("#1c7849")
-        if state in BURNING_STATES:
-            return QColor("#ff8429")
-        if state == BURNT:
-            return QColor("#6e4c34")
-        if state == BARRIER:
-            return QColor("#94a3b8")
-        return QColor("#091017")

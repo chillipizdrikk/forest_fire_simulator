@@ -122,6 +122,11 @@ class MainWindowActionsMixin:
 
     def on_rain_toggled(self, checked: bool):
         self.cfg.rain_enabled = bool(checked)
+        if self.cfg.rain_enabled and self.cfg.rain_scenario_enabled:
+            self.cfg.rain_scenario_enabled = False
+            self.chk_rain_scenario.blockSignals(True)
+            self.chk_rain_scenario.setChecked(False)
+            self.chk_rain_scenario.blockSignals(False)
         self._update_rain_status()
         self._update_stats()
 
@@ -133,17 +138,25 @@ class MainWindowActionsMixin:
 
     def on_rain_scenario_toggled(self, checked: bool):
         self.cfg.rain_scenario_enabled = bool(checked)
+        if self.cfg.rain_scenario_enabled and self.cfg.rain_enabled:
+            self.cfg.rain_enabled = False
+            self.chk_rain.blockSignals(True)
+            self.chk_rain.setChecked(False)
+            self.chk_rain.blockSignals(False)
         self._update_rain_status()
+        self._update_stats()
 
     def on_rain_scenario_intensity_changed(self, value: int):
         self.cfg.rain_scenario_intensity = value / 100.0
         self.rain_scen_lab.setText(f"{self.cfg.rain_scenario_intensity:.2f}")
         self._update_rain_status()
+        self._update_stats()
 
     def on_rain_scenario_steps_changed(self):
         self.cfg.rain_scenario_start_step = int(self.rain_start_spin.value())
         self.cfg.rain_scenario_end_step = int(self.rain_end_spin.value())
         self._update_rain_status()
+        self._update_stats()
 
     def on_conifer_ratio_changed(self, value: int):
         self.cfg.conifer_ratio = value / 100.0
