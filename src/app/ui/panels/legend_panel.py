@@ -18,14 +18,14 @@ def build_legend_card():
     layout.setContentsMargins(14, 12, 14, 12)
     layout.setSpacing(14)
     items = [
-         (_state_to_hex(EMPTY), "Empty"),
-        (_state_to_hex(TREE_DECID), "Deciduous"),
-        (_state_to_hex(TREE_CONIF), "Coniferous"),
-        (_state_to_hex(BURNING1), "Fire (Stage 1)"),
-        (_state_to_hex(BURNING2), "Fire (Stage 2)"),
-        (_state_to_hex(BURNING3), "Fire (Stage 3)"),
-        (_state_to_hex(BARRIER), "Barrier"),
-        (_state_to_hex(BURNT), "Burnt"),
+         (_state_to_hex(EMPTY), "Порожньо"),
+        (_state_to_hex(TREE_DECID), "Листяне"),
+        (_state_to_hex(TREE_CONIF), "Хвойне"),
+        (_state_to_hex(BURNING1), "Вогонь (стадія 1)"),
+        (_state_to_hex(BURNING2), "Вогонь (стадія 2)"),
+        (_state_to_hex(BURNING3), "Вогонь (стадія 3)"),
+        (_state_to_hex(BARRIER), "Бар'єр"),
+        (_state_to_hex(BURNT), "Випалено"),
     ]
     for color, text in items:
         item = QWidget()
