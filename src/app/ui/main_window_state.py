@@ -33,6 +33,10 @@ class MainWindowStateMixin:
         self.status_chip.setText("RUNNING" if self.timer.isActive() else "READY")
 
     def _update_rain_status(self):
+        if self.cfg.rain_scenario_start_step >= self.cfg.rain_scenario_end_step:
+            self.rain_status_lab.setText("Invalid scenario range: End must be greater than Start")
+            return
+
         current = self.ca.current_rain_intensity()
         if current > 0:
             self.rain_status_lab.setText(f"Rain active now: {current:.2f}")
