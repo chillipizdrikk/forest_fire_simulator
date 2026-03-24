@@ -29,7 +29,7 @@ def build_stats_card(window):
     layout = QVBoxLayout(window.stats_card)
     layout.setSpacing(12)
 
-    title = QLabel("Overview")
+    title = QLabel("Огляд")
     title.setObjectName("SectionTitle")
     layout.addWidget(title)
 
@@ -37,10 +37,10 @@ def build_stats_card(window):
     grid.setHorizontalSpacing(12)
     grid.setVerticalSpacing(12)
 
-    window.step_card, window.step_value = stat_card("0", "Simulation step")
-    window.fire_card, window.fire_value = stat_card("0", "Burning cells")
-    window.tree_card, window.tree_value = stat_card("0", "Living trees")
-    window.rain_card, window.rain_value = stat_card("OFF", "Rain now")
+    window.step_card, window.step_value = stat_card("0", "Крок симуляції")
+    window.fire_card, window.fire_value = stat_card("0", "Клітин, що горять")
+    window.tree_card, window.tree_value = stat_card("0", "Живих дерев")
+    window.rain_card, window.rain_value = stat_card("ВИМК", "Дощ зараз")
 
     cards = [window.step_card, window.fire_card, window.tree_card, window.rain_card]
     for i, card in enumerate(cards):
