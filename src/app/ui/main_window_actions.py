@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -85,18 +86,23 @@ class MainWindowActionsMixin:
         self.metrics_dialog.activateWindow()
 
     def on_export_metrics(self):
-        default_name = f"forest_fire_metrics_step_{self.ca.step_count}.json"
+        exports_dir = Path.cwd() / "exports" / "metrics"
+        exports_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_path = exports_dir / f"forest_fire_metrics_step_{self.ca.step_count}_{timestamp}.json"
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Експорт метрик",
-            default_name,
+            str(default_path),
             "JSON Files (*.json);;All Files (*)",
         )
         if not file_path:
             return
 
-        Path(file_path).write_text(self.last_run_metrics_json, encoding="utf-8")
-        self.statusBar().showMessage(f"Метрики збережено: {file_path}", 3500)
+        final_path = Path(file_path)
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        final_path.write_text(self.last_run_metrics_json, encoding="utf-8")
+        self.statusBar().showMessage(f"Метрики збережено у файл: {final_path.resolve()}", 3500)
 
     def on_tick(self):
         self.ca.step()

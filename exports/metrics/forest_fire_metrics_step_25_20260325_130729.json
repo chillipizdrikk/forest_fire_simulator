@@ -1,0 +1,1 @@
+{"burning_cells_t": [1, 2, 6, 10, 18, 26, 38, 45, 47, 49, 51, 51, 50, 45, 44, 42, 40, 35, 29, 25, 19, 12, 8, 6, 3, 0], "final_counts": {"barrier": 0, "burning": 0, "burnt": 234, "conif": 6, "decid": 1, "empty": 159}, "initial_tree_cells": 240, "metrics": {"auc": 702, "baf": 0.975, "fire_duration": 25, "peak_fire_size": 51, "time_to_peak": 10}}
