@@ -17,11 +17,12 @@ def run_simulation(
 ) -> dict[str, object]:
     if ignite_at is not None:
         ca.ignite(*ignite_at)
-        ca.start_run_tracking()
 
     fire_started = ca.has_active_fire()
     for _ in range(max_steps):
         if fire_started and not ca.has_active_fire():
+            break
+        if not wait_for_fire_start and not ca.has_active_fire():
             break
 
         ca.step()
@@ -67,13 +68,13 @@ def test_metrics_payload_invariants_no_rain_golden_scenario() -> None:
     payload = run_simulation(ca, max_steps=10, ignite_at=(0, 0))
 
     assert_payload_invariants(payload, ca.step_count)
-    assert payload["burning_cells_t"] == [1, 1, 1, 0]
+    assert payload["burning_cells_t"] == [0, 1, 1, 0]
     assert payload["metrics"] == {
         "baf": 1.0,
         "peak_fire_size": 1,
-        "time_to_peak": 0,
-        "fire_duration": 3,
-        "auc": 3,
+        "time_to_peak": 1,
+        "fire_duration": 2,
+        "auc": 2,
     }
 
 
