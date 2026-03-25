@@ -13,6 +13,7 @@ def connect_main_window_signals(window) -> None:
     window.btn_reset.clicked.connect(window.on_reset)
     window.btn_apply_size.clicked.connect(window.on_apply_size)
     window.btn_export_metrics.clicked.connect(window.on_export_metrics)
+    window.btn_open_analytics.clicked.connect(window.on_open_analytics)
 
 
     window.f_slider.valueChanged.connect(window.on_params_changed)

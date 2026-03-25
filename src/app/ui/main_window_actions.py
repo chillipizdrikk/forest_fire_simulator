@@ -76,6 +76,14 @@ class MainWindowActionsMixin:
         self._update_stats()
         self.statusBar().showMessage("Розмір ґратки оновлено.", 2500)
 
+
+    def on_open_analytics(self):
+        if self.metrics_dialog is None:
+            return
+        self.metrics_dialog.show()
+        self.metrics_dialog.raise_()
+        self.metrics_dialog.activateWindow()
+
     def on_export_metrics(self):
         default_name = f"forest_fire_metrics_step_{self.ca.step_count}.json"
         file_path, _ = QFileDialog.getSaveFileName(
