@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QVBoxLayout, QWidget
 
 from src.app.core.ca import CAConfig, ForestFireCA
 from src.app.ui.bindings import connect_main_window_signals
@@ -94,9 +94,6 @@ class MainWindow(MainWindowActionsMixin, MainWindowStateMixin, QMainWindow):
 
         top_actions = QVBoxLayout()
         top_actions.setSpacing(8)
-
-        self.btn_open_analytics = QPushButton("Аналітика")
-        top_actions.addWidget(self.btn_open_analytics, 0, Qt.AlignRight)
 
         self.status_chip = QLabel("ГОТОВО")
         self.status_chip.setObjectName("ValueBadge")

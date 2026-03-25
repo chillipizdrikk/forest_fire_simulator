@@ -79,9 +79,13 @@ def build_final_metrics_panel(window):
         final_grid.addWidget(card, i // 2, i % 2)
 
     layout.addLayout(final_grid)
+    
+    window.metrics_data_state = QLabel("Дані ще не зібрано")
+    window.metrics_data_state.setObjectName("Hint")
+    layout.addWidget(window.metrics_data_state)
 
     window.metrics_hint = QLabel(
-        "Підказка: JSON з метриками можна відкрити у notebook і побудувати plot за `burning_cells_t`."
+        "JSON-ключі: `burning_cells_t`, `final_counts`, `initial_tree_cells`, `metrics` (baf, peak_fire_size, time_to_peak, fire_duration, auc)."
     )
     window.metrics_hint.setWordWrap(True)
     window.metrics_hint.setObjectName("Hint")

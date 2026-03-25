@@ -41,6 +41,15 @@ class MainWindowStateMixin:
         self._set_text_if_widget_exists("time_to_peak_value", time_to_peak_text)
         self._set_text_if_widget_exists("fire_duration_value", fire_duration_text)
         self._set_text_if_widget_exists("auc_value", auc_text)
+        self._set_text_if_widget_exists(
+            "metrics_data_state",
+            "Фінальні метрики готові до перегляду та експорту." if show_final_metrics else "Дані ще не зібрано",
+        )
+
+        if hasattr(self, "btn_open_analytics"):
+            self.btn_open_analytics.setEnabled(show_final_metrics)
+        if hasattr(self, "btn_export_metrics"):
+            self.btn_export_metrics.setEnabled(show_final_metrics)
 
     def _update_rain_status(self):
         if self.cfg.rain_scenario_start_step >= self.cfg.rain_scenario_end_step:
