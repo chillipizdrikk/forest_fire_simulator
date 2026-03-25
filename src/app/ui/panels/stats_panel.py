@@ -24,7 +24,7 @@ def stat_card(value: str, caption: str):
     return card, value_label
 
 
-def build_stats_card(window):
+def build_live_stats_card(window):
     window.stats_card = create_card()
     layout = QVBoxLayout(window.stats_card)
     layout.setSpacing(12)
@@ -47,7 +47,13 @@ def build_stats_card(window):
         grid.addWidget(card, i // 2, i % 2)
 
     layout.addLayout(grid)
-    
+
+
+def build_final_metrics_panel(window):
+    panel = create_card()
+    layout = QVBoxLayout(panel)
+    layout.setSpacing(12)
+
     final_title = QLabel("Фінальні KPI (після завершення/паузи)")
     final_title.setObjectName("Hint")
     layout.addWidget(final_title)
@@ -74,10 +80,14 @@ def build_stats_card(window):
 
     layout.addLayout(final_grid)
 
-    window.metrics_hint = QLabel("Підказка: JSON з метриками можна відкрити у notebook і побудувати plot за `burning_cells_t`.")
+    window.metrics_hint = QLabel(
+        "Підказка: JSON з метриками можна відкрити у notebook і побудувати plot за `burning_cells_t`."
+    )
     window.metrics_hint.setWordWrap(True)
     window.metrics_hint.setObjectName("Hint")
     layout.addWidget(window.metrics_hint)
 
     window.btn_export_metrics = QPushButton("Експорт метрик")
     layout.addWidget(window.btn_export_metrics)
+
+    return panel

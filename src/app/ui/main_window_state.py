@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 class MainWindowStateMixin:
     def _sync_initial_state(self):
         self.grid_widget.set_grid(self.ca.grid)
@@ -10,6 +11,11 @@ class MainWindowStateMixin:
 
     def _cell_counts(self):
         return self.ca.cell_counts()
+
+    def _set_text_if_widget_exists(self, attr_name: str, value: str):
+        widget = getattr(self, attr_name, None)
+        if widget is not None:
+            widget.setText(value)
 
     def _update_stats(self):
         counts = self._cell_counts()
@@ -24,11 +30,17 @@ class MainWindowStateMixin:
         metrics = self.last_run_metrics.get("metrics", {})
         show_final_metrics = bool(self.show_final_metrics and isinstance(metrics, dict))
 
-        self.baf_value.setText(f"{float(metrics.get('baf', 0.0)):.4f}" if show_final_metrics else "—")
-        self.peak_fire_value.setText(str(int(metrics.get("peak_fire_size", 0))) if show_final_metrics else "—")
-        self.time_to_peak_value.setText(str(int(metrics.get("time_to_peak", 0))) if show_final_metrics else "—")
-        self.fire_duration_value.setText(str(int(metrics.get("fire_duration", 0))) if show_final_metrics else "—")
-        self.auc_value.setText(str(int(metrics.get("auc", 0))) if show_final_metrics else "—")
+        baf_text = f"{float(metrics.get('baf', 0.0)):.4f}" if show_final_metrics else "—"
+        peak_text = str(int(metrics.get("peak_fire_size", 0))) if show_final_metrics else "—"
+        time_to_peak_text = str(int(metrics.get("time_to_peak", 0))) if show_final_metrics else "—"
+        fire_duration_text = str(int(metrics.get("fire_duration", 0))) if show_final_metrics else "—"
+        auc_text = str(int(metrics.get("auc", 0))) if show_final_metrics else "—"
+
+        self._set_text_if_widget_exists("baf_value", baf_text)
+        self._set_text_if_widget_exists("peak_fire_value", peak_text)
+        self._set_text_if_widget_exists("time_to_peak_value", time_to_peak_text)
+        self._set_text_if_widget_exists("fire_duration_value", fire_duration_text)
+        self._set_text_if_widget_exists("auc_value", auc_text)
 
     def _update_rain_status(self):
         if self.cfg.rain_scenario_start_step >= self.cfg.rain_scenario_end_step:
