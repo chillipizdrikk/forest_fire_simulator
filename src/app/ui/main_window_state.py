@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from src.app.core.ca import BARRIER, BURNT, BURNING_STATES, EMPTY, TREE_CONIF, TREE_DECID
-
-
 class MainWindowStateMixin:
     def _sync_initial_state(self):
         self.grid_widget.set_grid(self.ca.grid)
@@ -12,15 +9,7 @@ class MainWindowStateMixin:
         self.on_wind_toggled(self.cfg.wind_enabled)
 
     def _cell_counts(self):
-        g = self.ca.grid
-        return {
-            "empty": int((g == EMPTY).sum()),
-            "decid": int((g == TREE_DECID).sum()),
-            "conif": int((g == TREE_CONIF).sum()),
-            "burning": int(sum((g == state).sum() for state in BURNING_STATES)),
-            "barrier": int((g == BARRIER).sum()),
-            "burnt": int((g == BURNT).sum()),
-        }
+        return self.ca.cell_counts()
 
     def _update_stats(self):
         counts = self._cell_counts()

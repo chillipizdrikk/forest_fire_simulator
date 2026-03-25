@@ -15,6 +15,7 @@ from src.app.core.constants import (
     TREE_DECID,
     TREE_STATES,
 )
+from src.app.core.metrics import calculate_fire_metrics, metrics_to_json
 
 
 class ForestFireCA:
@@ -38,6 +39,11 @@ class ForestFireCA:
         self.grid = self._make_initial_grid()
         self.step_count = 0
         self._lightning_cooldown = 0
+        self.initial_tree_cells = 0
+        self.burning_cells_history: list[int] = []
+        self.final_counts: dict[str, int] = {}
+        self.latest_metrics: dict[str, int | float] = {}
+        self.start_run_tracking()
 
     def _make_initial_grid(self) -> np.ndarray:
         cfg = self.cfg
@@ -58,9 +64,55 @@ class ForestFireCA:
         self.grid = self._make_initial_grid()
         self.step_count = 0
         self._lightning_cooldown = 0
+        self.start_run_tracking()
 
     def has_active_fire(self) -> bool:
         return bool(np.any((self.grid == BURNING1) | (self.grid == BURNING2) | (self.grid == BURNING3)))
+
+    def _burning_cells_count(self) -> int:
+        return int(np.count_nonzero((self.grid == BURNING1) | (self.grid == BURNING2) | (self.grid == BURNING3)))
+
+    def cell_counts(self) -> dict[str, int]:
+        g = self.grid
+        return {
+            "empty": int(np.count_nonzero(g == EMPTY)),
+            "decid": int(np.count_nonzero(g == TREE_DECID)),
+            "conif": int(np.count_nonzero(g == TREE_CONIF)),
+            "burning": self._burning_cells_count(),
+            "barrier": int(np.count_nonzero(g == BARRIER)),
+            "burnt": int(np.count_nonzero(g == BURNT)),
+        }
+
+    def start_run_tracking(self):
+        trees = (self.grid == TREE_DECID) | (self.grid == TREE_CONIF)
+        self.initial_tree_cells = int(np.count_nonzero(trees))
+        self.burning_cells_history = [self._burning_cells_count()]
+        self.final_counts = self.cell_counts()
+        self.latest_metrics = calculate_fire_metrics(
+            burning_cells=self.burning_cells_history,
+            initial_tree_cells=self.initial_tree_cells,
+            final_counts=self.final_counts,
+        )
+
+    def finalize_run_metrics(self) -> dict[str, int | float]:
+        self.final_counts = self.cell_counts()
+        self.latest_metrics = calculate_fire_metrics(
+            burning_cells=self.burning_cells_history,
+            initial_tree_cells=self.initial_tree_cells,
+            final_counts=self.final_counts,
+        )
+        return self.latest_metrics
+
+    def metrics_payload(self) -> dict[str, object]:
+        return {
+            "initial_tree_cells": int(self.initial_tree_cells),
+            "burning_cells_t": [int(v) for v in self.burning_cells_history],
+            "final_counts": {key: int(value) for key, value in self.final_counts.items()},
+            "metrics": dict(self.latest_metrics),
+        }
+
+    def metrics_payload_json(self) -> str:
+        return metrics_to_json(self.metrics_payload())
 
     def current_rain_intensity(self) -> float:
         manual = float(self.cfg.rain_intensity) if self.cfg.rain_enabled else 0.0
@@ -245,4 +297,5 @@ class ForestFireCA:
 
         self.grid = next_g
         self.step_count += 1
+        self.burning_cells_history.append(self._burning_cells_count())
         return self.grid

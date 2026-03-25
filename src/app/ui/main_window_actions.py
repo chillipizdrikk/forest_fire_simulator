@@ -7,6 +7,11 @@ from src.app.core.ca import CAConfig, ForestFireCA, TREE_CONIF, TREE_DECID
 
 
 class MainWindowActionsMixin:
+    def _save_metrics_snapshot(self, finalize: bool = False):
+        self.ca.finalize_run_metrics()
+        self.last_run_metrics = self.ca.metrics_payload()
+        self.last_run_metrics_json = self.ca.metrics_payload_json()
+
     def on_start(self):
         self.run_has_seen_fire = self.ca.has_active_fire()
         has_trees = bool(np.any((self.ca.grid == TREE_DECID) | (self.ca.grid == TREE_CONIF)))
@@ -19,11 +24,18 @@ class MainWindowActionsMixin:
             self.statusBar().showMessage("Немає активного займання, а блискавка вимкнена або має нульову ймовірність.", 3500)
             return
 
+        if not self.run_in_progress:
+            self.ca.start_run_tracking()
+            self.run_in_progress = True
+            self.last_run_metrics = self.ca.metrics_payload()
+            self.last_run_metrics_json = self.ca.metrics_payload_json()
+
         self.timer.start(self.speed_slider.value())
         self._update_stats()
 
     def on_pause(self):
         self.timer.stop()
+        self._save_metrics_snapshot(finalize=False)
         self._update_stats()
 
     def on_step(self):
@@ -33,6 +45,9 @@ class MainWindowActionsMixin:
         self.timer.stop()
         self.ca.reset()
         self.run_has_seen_fire = False
+        self.run_in_progress = False
+        self.last_run_metrics = self.ca.metrics_payload()
+        self.last_run_metrics_json = self.ca.metrics_payload_json()
         self.grid_widget.set_grid(self.ca.grid)
         self._update_rain_status()
         self._update_stats()
@@ -44,12 +59,19 @@ class MainWindowActionsMixin:
         self.cfg.height = int(self.h_spin.value())
         self.ca = ForestFireCA(self.cfg)
         self.run_has_seen_fire = False
+        self.run_in_progress = False
+        self.last_run_metrics = self.ca.metrics_payload()
+        self.last_run_metrics_json = self.ca.metrics_payload_json()
         self.grid_widget.set_grid(self.ca.grid)
         self._update_rain_status()
         self._update_stats()
         self.statusBar().showMessage("Розмір ґратки оновлено.", 2500)
 
     def on_tick(self):
+        if not self.run_in_progress:
+            self.ca.start_run_tracking()
+            self.run_in_progress = True
+
         self.ca.step()
         self.grid_widget.set_grid(self.ca.grid)
         self._update_rain_status()
@@ -64,18 +86,24 @@ class MainWindowActionsMixin:
 
         if self.timer.isActive() and not has_trees:
             self.timer.stop()
+            self.run_in_progress = False
+            self._save_metrics_snapshot(finalize=True)
             self._update_stats()
             self.statusBar().showMessage("На карті більше немає дерев. Симуляцію зупинено.", 2500)
             return
 
         if self.timer.isActive() and not has_active_fire and not has_future_ignition_sources:
             self.timer.stop()
+            self.run_in_progress = False
+            self._save_metrics_snapshot(finalize=True)
             self._update_stats()
             self.statusBar().showMessage("Активного вогню немає і нові займання неможливі. Симуляцію зупинено.", 2500)
             return
 
         if self.run_has_seen_fire and not has_active_fire:
             self.timer.stop()
+            self.run_in_progress = False
+            self._save_metrics_snapshot(finalize=True)
             self._update_stats()
             self.statusBar().showMessage("Пожежний інцидент завершився.", 2500)
 
