@@ -16,7 +16,7 @@ from src.app.ui.styles import apply_main_window_styles
 class MainWindow(MainWindowActionsMixin, MainWindowStateMixin, QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Forest Fire CA Simulator")
+        self.setWindowTitle("Симулятор лісової пожежі (клітинний автомат)")
         self.resize(1520, 920)
         self.setMinimumSize(1280, 760)
 
@@ -63,7 +63,7 @@ class MainWindow(MainWindowActionsMixin, MainWindowStateMixin, QMainWindow):
         header_layout = QVBoxLayout(header_card)
         header_layout.setSpacing(8)
 
-        title = QLabel("Forest Fire Cellular Automata Simulator")
+        title = QLabel("Симулятор лісової пожежі на основі клітинного автомата")
         title.setObjectName("Title")
         header_layout.addWidget(title)
         left_col.addWidget(header_card)
@@ -75,7 +75,7 @@ class MainWindow(MainWindowActionsMixin, MainWindowStateMixin, QMainWindow):
         top_bar = QHBoxLayout()
         text_col = QVBoxLayout()
 
-        sim_title = QLabel("Simulation field")
+        sim_title = QLabel("Поле симуляції")
         sim_title.setObjectName("SectionTitle")
 
         sim_hint = QLabel(
@@ -88,7 +88,7 @@ class MainWindow(MainWindowActionsMixin, MainWindowStateMixin, QMainWindow):
         text_col.addWidget(sim_hint)
         top_bar.addLayout(text_col, 1)
 
-        self.status_chip = QLabel("READY")
+        self.status_chip = QLabel("ГОТОВО")
         self.status_chip.setObjectName("ValueBadge")
         top_bar.addWidget(self.status_chip, 0, Qt.AlignTop)
 
@@ -108,7 +108,7 @@ class MainWindow(MainWindowActionsMixin, MainWindowStateMixin, QMainWindow):
         right_layout.setContentsMargins(14, 14, 14, 14)
         right_layout.setSpacing(12)
 
-        side_title = QLabel("Control panel")
+        side_title = QLabel("Панель керування")
         side_title.setObjectName("SectionTitle")
         right_layout.addWidget(side_title)
 
@@ -118,4 +118,4 @@ class MainWindow(MainWindowActionsMixin, MainWindowStateMixin, QMainWindow):
         build_controls_tabs(self, right_layout)
         build_all_controls(self)
 
-        self.statusBar().showMessage("Готово до редагування карти.")
+        self.statusBar().showMessage("Готово до редагування мапи.")

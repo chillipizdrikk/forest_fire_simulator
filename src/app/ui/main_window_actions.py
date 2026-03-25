@@ -36,7 +36,7 @@ class MainWindowActionsMixin:
         self.grid_widget.set_grid(self.ca.grid)
         self._update_rain_status()
         self._update_stats()
-        self.statusBar().showMessage("Карту скинуто до початкового стану.", 2500)
+        self.statusBar().showMessage("Мапу скинуто до початкового стану.", 2500)
 
     def on_apply_size(self):
         self.timer.stop()
@@ -47,7 +47,7 @@ class MainWindowActionsMixin:
         self.grid_widget.set_grid(self.ca.grid)
         self._update_rain_status()
         self._update_stats()
-        self.statusBar().showMessage("Розмір сітки оновлено.", 2500)
+        self.statusBar().showMessage("Розмір ґратки оновлено.", 2500)
 
     def on_tick(self):
         self.ca.step()
@@ -81,7 +81,7 @@ class MainWindowActionsMixin:
 
     def on_cell_painted(self, row: int, col: int, button: int):
         if self.timer.isActive():
-            self.statusBar().showMessage("Натисни Pause, щоб редагувати карту.", 1400)
+            self.statusBar().showMessage("Натисни «Пауза», щоб редагувати мапу.", 1400)
             return
 
         if button == Qt.RightButton.value:
@@ -91,15 +91,15 @@ class MainWindowActionsMixin:
             return
 
         tool = self.tool_combo.currentText()
-        if tool == "Ignite":
+        if tool == "Підпал":
             self.ca.ignite(row, col)
-        elif tool == "Plant decid":
+        elif tool == "Посадити листяне дерево":
             self.ca.plant_decid(row, col)
-        elif tool == "Plant conif":
+        elif tool == "Посадити хвойне дерево":
             self.ca.plant_conif(row, col)
-        elif tool == "Barrier":
+        elif tool == "Бар'єр":
             self.ca.set_barrier(row, col, True)
-        elif tool == "Erase":
+        elif tool == "Стерти":
             self.ca.set_empty(row, col)
 
         self.grid_widget.set_grid(self.ca.grid)
@@ -183,7 +183,7 @@ class MainWindowActionsMixin:
             self.rain_end_spin.blockSignals(True)
             self.rain_end_spin.setValue(end_step)
             self.rain_end_spin.blockSignals(False)
-            self.statusBar().showMessage("Rain scenario range auto-corrected: End was set to Start + 1.", 3000)
+            self.statusBar().showMessage("Діапазон сценарію дощу авто-виправлено: кінець = початок + 1.", 3000)
 
         self.cfg.rain_scenario_start_step = start_step
         self.cfg.rain_scenario_end_step = end_step
