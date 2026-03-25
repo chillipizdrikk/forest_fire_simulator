@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QFileDialog
 
 from src.app.core.ca import CAConfig, ForestFireCA, TREE_CONIF, TREE_DECID
 
@@ -11,6 +14,7 @@ class MainWindowActionsMixin:
         self.ca.finalize_run_metrics()
         self.last_run_metrics = self.ca.metrics_payload()
         self.last_run_metrics_json = self.ca.metrics_payload_json()
+        self.show_final_metrics = True
 
     def on_start(self):
         if self.timer.isActive():
@@ -30,6 +34,7 @@ class MainWindowActionsMixin:
         if not self.run_in_progress:
             self.ca.start_run_tracking()
             self.run_has_seen_fire = self.ca.has_active_fire()
+        self.show_final_metrics = False
 
         self.timer.start(self.speed_slider.value())
         self.run_in_progress = True
@@ -50,6 +55,7 @@ class MainWindowActionsMixin:
         self.ca.reset()
         self.run_has_seen_fire = False
         self.run_in_progress = False
+        self.show_final_metrics = False
         self.grid_widget.set_grid(self.ca.grid)
         self._update_rain_status()
         self._update_stats()
@@ -64,10 +70,25 @@ class MainWindowActionsMixin:
         self.ca = ForestFireCA(self.cfg)
         self.run_has_seen_fire = False
         self.run_in_progress = False
+        self.show_final_metrics = False
         self.grid_widget.set_grid(self.ca.grid)
         self._update_rain_status()
         self._update_stats()
         self.statusBar().showMessage("Розмір ґратки оновлено.", 2500)
+
+    def on_export_metrics(self):
+        default_name = f"forest_fire_metrics_step_{self.ca.step_count}.json"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Експорт метрик",
+            default_name,
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not file_path:
+            return
+
+        Path(file_path).write_text(self.last_run_metrics_json, encoding="utf-8")
+        self.statusBar().showMessage(f"Метрики збережено: {file_path}", 3500)
 
     def on_tick(self):
         self.ca.step()

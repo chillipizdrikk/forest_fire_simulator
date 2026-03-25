@@ -43,6 +43,7 @@ class MainWindow(MainWindowActionsMixin, MainWindowStateMixin, QMainWindow):
         self.ca = ForestFireCA(self.cfg)
         self.run_has_seen_fire = False
         self.run_in_progress = False
+        self.show_final_metrics = False
         self.last_run_metrics: dict[str, object] = self.ca.metrics_payload()
         self.last_run_metrics_json: str = self.ca.metrics_payload_json()
 

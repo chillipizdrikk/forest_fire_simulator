@@ -12,6 +12,8 @@ def connect_main_window_signals(window) -> None:
     window.btn_step.clicked.connect(window.on_step)
     window.btn_reset.clicked.connect(window.on_reset)
     window.btn_apply_size.clicked.connect(window.on_apply_size)
+    window.btn_export_metrics.clicked.connect(window.on_export_metrics)
+
 
     window.f_slider.valueChanged.connect(window.on_params_changed)
     window.speed_slider.valueChanged.connect(window.on_speed_changed)

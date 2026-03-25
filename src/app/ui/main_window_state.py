@@ -21,6 +21,15 @@ class MainWindowStateMixin:
         self.rain_value.setText("ВИМК" if current_rain <= 0 else f"{current_rain:.2f}")
         self.status_chip.setText("ВИКОНАННЯ" if self.timer.isActive() else "ГОТОВО")
 
+        metrics = self.last_run_metrics.get("metrics", {})
+        show_final_metrics = bool(self.show_final_metrics and isinstance(metrics, dict))
+
+        self.baf_value.setText(f"{float(metrics.get('baf', 0.0)):.4f}" if show_final_metrics else "—")
+        self.peak_fire_value.setText(str(int(metrics.get("peak_fire_size", 0))) if show_final_metrics else "—")
+        self.time_to_peak_value.setText(str(int(metrics.get("time_to_peak", 0))) if show_final_metrics else "—")
+        self.fire_duration_value.setText(str(int(metrics.get("fire_duration", 0))) if show_final_metrics else "—")
+        self.auc_value.setText(str(int(metrics.get("auc", 0))) if show_final_metrics else "—")
+
     def _update_rain_status(self):
         if self.cfg.rain_scenario_start_step >= self.cfg.rain_scenario_end_step:
             self.rain_status_lab.setText("Некоректний діапазон сценарію: кінець має бути більшим за початок")
