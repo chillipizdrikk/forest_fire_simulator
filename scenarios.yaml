@@ -1,0 +1,37 @@
+defaults:
+  width: 120
+  height: 120
+  init_tree_density: 0.7
+  conifer_ratio: 0.5
+  humidity: 0.25
+  temperature_c: 28.0
+  lightning_enabled: true
+  f: 0.01
+  wind_enabled: false
+  wind_dir: E
+  wind_strength: 0.4
+  rain_enabled: false
+  rain_intensity: 0.0
+
+scenarios:
+  - name: baseline
+    params: {}
+
+  - name: dry_windy
+    params:
+      humidity: 0.1
+      wind_enabled: true
+      wind_strength: 0.8
+
+  - name: wet_cool
+    params:
+      humidity: 0.6
+      temperature_c: 18.0
+      rain_enabled: true
+      rain_intensity: 0.5
+
+  - name: high_conifer
+    params:
+      conifer_ratio: 0.8
+      flamm_conif: 1.1
+      flamm_decid: 0.75
