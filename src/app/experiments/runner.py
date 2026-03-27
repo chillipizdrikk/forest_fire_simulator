@@ -47,8 +47,10 @@ def _simulate_single_run(cfg: CAConfig, max_steps: int, critical_baf_threshold: 
         **calculate_derived_metrics(
             burning_cells=series,
             step_count=ca.step_count,
+            initial_tree_cells=ca.initial_tree_cells,
             critical_baf_threshold=critical_baf_threshold,
             baf=float(final_metrics.get("baf", 0.0)),
+            steps_total_or_fire_horizon=ca.step_count,
         ),
     }
 

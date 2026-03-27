@@ -127,6 +127,7 @@ def test_calculate_derived_metrics_includes_critical_and_steps_total() -> None:
     result = calculate_derived_metrics(
         burning_cells=[0, 1, 4, 0],
         step_count=3,
+        initial_tree_cells=10,
         critical_baf_threshold=0.5,
         baf=0.75,
     )
@@ -134,6 +135,11 @@ def test_calculate_derived_metrics_includes_critical_and_steps_total() -> None:
     assert result == {
         "time_to_extinguish": 3,
         "max_spread_rate": 3,
+        "initial_tree_cells": 10,
         "steps_total": 3,
+        "steps_total_or_fire_horizon": 3,
+        "peak_fire_fraction": 0.4,
+        "auc_normalization_denominator": 30,
+        "auc_normalized": 1 / 6,
         "critical": True,
     }
