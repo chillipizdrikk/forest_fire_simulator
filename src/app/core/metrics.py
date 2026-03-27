@@ -39,6 +39,25 @@ def burned_area_fraction(initial_tree_cells: int, final_burnt_cells: int) -> flo
     return float(min(1.0, burnt / trees))
 
 
+def time_to_extinguish(burning_cells: Sequence[int]) -> int:
+    series = _clean_burning_series(burning_cells)
+    fire_started = False
+    for step_idx, burning in enumerate(series):
+        if burning > 0:
+            fire_started = True
+        if fire_started and burning == 0:
+            return int(step_idx)
+    return max(len(series) - 1, 0)
+
+
+def max_spread_rate(burning_cells: Sequence[int]) -> int:
+    series = _clean_burning_series(burning_cells)
+    if len(series) < 2:
+        return 0
+    diffs = [series[idx] - series[idx - 1] for idx in range(1, len(series))]
+    return int(max(diffs, default=0))
+
+
 def calculate_fire_metrics(
     burning_cells: Sequence[int],
     initial_tree_cells: int,
@@ -53,6 +72,21 @@ def calculate_fire_metrics(
         "auc": area_under_curve(burning_cells),
     }
     return metrics
+
+
+def calculate_derived_metrics(
+    *,
+    burning_cells: Sequence[int],
+    step_count: int,
+    critical_baf_threshold: float,
+    baf: float,
+) -> dict[str, int | bool]:
+    return {
+        "time_to_extinguish": time_to_extinguish(burning_cells),
+        "max_spread_rate": max_spread_rate(burning_cells),
+        "steps_total": max(0, int(step_count)),
+        "critical": bool(float(baf) >= float(critical_baf_threshold)),
+    }
 
 
 def metrics_to_json(payload: dict[str, object]) -> str:

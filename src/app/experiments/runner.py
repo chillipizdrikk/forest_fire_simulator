@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import csv
@@ -10,6 +10,7 @@ import numpy as np
 
 from src.app.core.config import CAConfig
 from src.app.core.engine import ForestFireCA
+from src.app.core.metrics import calculate_derived_metrics
 from src.app.experiments.scenarios import ScenarioDefinition
 
 
@@ -26,24 +27,7 @@ def _first_ignition_point(cfg: CAConfig) -> tuple[int, int]:
     return cfg.height // 2, cfg.width // 2
 
 
-def _time_to_extinguish(burning_cells_t: list[int]) -> int:
-    fire_started = False
-    for step_idx, burning in enumerate(burning_cells_t):
-        if burning > 0:
-            fire_started = True
-        if fire_started and burning == 0:
-            return step_idx
-    return max(len(burning_cells_t) - 1, 0)
-
-
-def _max_spread_rate(burning_cells_t: list[int]) -> int:
-    if len(burning_cells_t) < 2:
-        return 0
-    diffs = [burning_cells_t[idx] - burning_cells_t[idx - 1] for idx in range(1, len(burning_cells_t))]
-    return int(max(diffs, default=0))
-
-
-def _simulate_single_run(cfg: CAConfig, max_steps: int) -> dict[str, Any]:
+def _simulate_single_run(cfg: CAConfig, max_steps: int, critical_baf_threshold: float) -> dict[str, Any]:
     ca = ForestFireCA(cfg)
     ignite_row, ignite_col = _first_ignition_point(cfg)
     ca.ignite(ignite_row, ignite_col)
@@ -60,9 +44,12 @@ def _simulate_single_run(cfg: CAConfig, max_steps: int) -> dict[str, Any]:
 
     return {
         **final_metrics,
-        "time_to_extinguish": _time_to_extinguish(series),
-        "max_spread_rate": _max_spread_rate(series),
-        "steps_total": int(ca.step_count),
+        **calculate_derived_metrics(
+            burning_cells=series,
+            step_count=ca.step_count,
+            critical_baf_threshold=critical_baf_threshold,
+            baf=float(final_metrics.get("baf", 0.0)),
+        ),
     }
 
 
@@ -83,8 +70,7 @@ def run_experiments(
         for run_index in range(runs_per_scenario):
             seed = int(rng.integers(0, np.iinfo(np.int32).max))
             cfg = CAConfig(**{**merged_params, "seed": seed})
-            metrics = _simulate_single_run(cfg, max_steps=max_steps)
-            metrics["critical"] = bool(float(metrics.get("baf", 0.0)) >= critical_baf_threshold)
+            metrics = _simulate_single_run(cfg, max_steps=max_steps, critical_baf_threshold=critical_baf_threshold)
 
             all_results.append(
                 ExperimentResult(
