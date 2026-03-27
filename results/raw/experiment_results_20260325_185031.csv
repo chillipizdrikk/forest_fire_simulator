@@ -1,0 +1,5 @@
+auc,baf,critical,fire_duration,max_spread_rate,param_conifer_ratio,param_f,param_flamm_conif,param_flamm_decid,param_height,param_humidity,param_init_tree_density,param_lightning_enabled,param_rain_enabled,param_rain_intensity,param_temperature_c,param_width,param_wind_dir,param_wind_enabled,param_wind_strength,peak_fire_size,run_id,scenario,seed,steps_total,time_to_extinguish,time_to_peak
+0,0.0,False,0,0,0.5,0.01,,,120,0.25,0.7,True,False,0.0,28.0,120,E,False,0.4,0,baseline-0000,baseline,191664963,10,10,0
+370,0.007068525427056745,False,10,14,0.5,0.01,,,120,0.1,0.7,True,False,0.0,28.0,120,E,True,0.8,77,dry_windy-0000,dry_windy,1662057957,10,10,10
+79,0.002478929102627665,False,10,5,0.5,0.01,,,120,0.6,0.7,True,True,0.5,18.0,120,E,False,0.4,16,wet_cool-0000,wet_cool,1405681631,10,10,7
+683,0.013984616921386474,False,10,22,0.8,0.01,1.1,0.75,120,0.25,0.7,True,False,0.0,28.0,120,E,False,0.4,142,high_conifer-0000,high_conifer,942484272,10,10,10

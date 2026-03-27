@@ -1,0 +1,53 @@
+<html><head><meta charset='utf-8'><title>Forest fire experiments report</title></head><body>
+<h1>Forest fire experiments report</h1>
+<h2>Overall</h2>
+<ul>
+<li>Total runs: 40</li>
+<li>Mean burned area fraction: 0.6523</li>
+<li>Burned area p95/p99: 0.9999 / 1.0000</li>
+<li>Catastrophic probability (baf &gt;= 0.8): 0.6750</li>
+<li>Scenario ranking metric: auc_normalized_mean</li>
+</ul>
+<h2>Worst scenarios by normalized AUC</h2><ol>
+<li>baseline: 0.0373</li>
+<li>high_conifer: 0.0364</li>
+<li>dry_windy: 0.0222</li>
+</ol>
+<h2>Absolute KPI ranking</h2>
+<h3>Mean burned area fraction (absolute, point estimate)</h3><ol>
+<li>baseline: 0.9795</li>
+<li>high_conifer: 0.8996</li>
+<li>dry_windy: 0.7278</li>
+</ol><h3>Mean burned area fraction (95% bootstrap CI)</h3><ol>
+<li>baseline: 0.9795 (95% CI: 0.9397..0.9995)</li>
+<li>high_conifer: 0.8996 (95% CI: 0.6996..0.9997)</li>
+<li>dry_windy: 0.7278 (95% CI: 0.5017..0.8895)</li>
+</ol><h3>Conservative risk ranking (mean BAF upper 95% CI bound)</h3><ol>
+<li>high_conifer: upper_ci=0.9997 (mean=0.8996, 95% CI: 0.6996..0.9997)</li>
+<li>baseline: upper_ci=0.9995 (mean=0.9795, 95% CI: 0.9397..0.9995)</li>
+<li>dry_windy: upper_ci=0.8895 (mean=0.7278, 95% CI: 0.5017..0.8895)</li>
+</ol><h3>Mean AUC (absolute)</h3><ol>
+<li>baseline: 29677.2000</li>
+<li>high_conifer: 27291.6000</li>
+<li>dry_windy: 22347.3000</li>
+</ol>
+<h2>Normalized KPI ranking</h2>
+<h3>Mean peak_fire_fraction (normalized)</h3><ol>
+<li>baseline: 0.0835</li>
+<li>high_conifer: 0.0763</li>
+<li>dry_windy: 0.0513</li>
+</ol><h3>Mean auc_normalized (normalized)</h3><ol>
+<li>baseline: 0.0373</li>
+<li>high_conifer: 0.0364</li>
+<li>dry_windy: 0.0222</li>
+</ol><h2>Top parameter-metric correlations</h2><ul>
+<li>param_humidity vs time_to_extinguish: -0.8779</li>
+<li>param_rain_enabled vs baf: -0.8486</li>
+<li>param_rain_intensity vs baf: -0.8486</li>
+<li>param_temperature_c vs baf: 0.8486</li>
+<li>param_rain_enabled vs max_spread_rate: -0.8425</li>
+</ul>
+<h2>Figures</h2>
+<figure><img src='figures/baf_hist.png' alt='baf_hist' width='600'></figure>
+<figure><img src='figures/scenario_baf_boxplot.png' alt='scenario_baf_boxplot' width='600'></figure>
+</body></html>
