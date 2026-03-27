@@ -16,6 +16,9 @@ fire_duration = metrics.fire_duration
 area_under_curve = metrics.area_under_curve
 burned_area_fraction = metrics.burned_area_fraction
 calculate_fire_metrics = metrics.calculate_fire_metrics
+time_to_extinguish = metrics.time_to_extinguish
+max_spread_rate = metrics.max_spread_rate
+calculate_derived_metrics = metrics.calculate_derived_metrics
 
 
 def test_peak_fire_size_returns_zero_for_empty_series() -> None:
@@ -109,4 +112,28 @@ def test_calculate_fire_metrics_with_multiple_equal_peaks_and_clamped_baf() -> N
         "time_to_peak": 2,
         "fire_duration": 3,
         "auc": 12,
+    }
+
+
+def test_time_to_extinguish_returns_first_zero_after_fire_start() -> None:
+    assert time_to_extinguish([0, 2, 3, 1, 0, 0]) == 4
+
+
+def test_max_spread_rate_uses_max_positive_delta() -> None:
+    assert max_spread_rate([0, 1, 4, 2, 7]) == 5
+
+
+def test_calculate_derived_metrics_includes_critical_and_steps_total() -> None:
+    result = calculate_derived_metrics(
+        burning_cells=[0, 1, 4, 0],
+        step_count=3,
+        critical_baf_threshold=0.5,
+        baf=0.75,
+    )
+
+    assert result == {
+        "time_to_extinguish": 3,
+        "max_spread_rate": 3,
+        "steps_total": 3,
+        "critical": True,
     }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout
 
+from src.app.core.metrics_schema import metrics_keys
 from src.app.ui.panels.common import create_card
 
 
@@ -84,8 +85,9 @@ def build_final_metrics_panel(window):
     window.metrics_data_state.setObjectName("Hint")
     layout.addWidget(window.metrics_data_state)
 
+    metric_keys_text = ", ".join(metrics_keys())
     window.metrics_hint = QLabel(
-        "JSON-ключі: `burning_cells_t`, `final_counts`, `initial_tree_cells`, `metrics` (baf, peak_fire_size, time_to_peak, fire_duration, auc)."
+        f"JSON-ключі: `burning_cells_t`, `final_counts`, `initial_tree_cells`, `metrics` ({metric_keys_text})."
     )
     window.metrics_hint.setWordWrap(True)
     window.metrics_hint.setObjectName("Hint")
