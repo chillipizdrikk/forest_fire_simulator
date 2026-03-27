@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Sequence
 
+METRICS_PAYLOAD_SCHEMA_VERSION = 2
+
 
 def _clean_burning_series(burning_cells: Sequence[int]) -> list[int]:
     return [max(0, int(value)) for value in burning_cells]
@@ -104,4 +106,30 @@ def calculate_derived_metrics(
 
 
 def metrics_to_json(payload: dict[str, object]) -> str:
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    normalized = read_metrics_payload(payload)
+    return json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def read_metrics_payload(raw_payload: dict[str, object]) -> dict[str, object]:
+    payload = dict(raw_payload)
+
+    final_counts_raw = payload.get("final_counts", {})
+    final_counts = final_counts_raw if isinstance(final_counts_raw, dict) else {}
+
+    metrics_raw = payload.get("metrics", {})
+    metrics = metrics_raw if isinstance(metrics_raw, dict) else {}
+
+    config_snapshot_raw = payload.get("config_snapshot", {})
+    config_snapshot = config_snapshot_raw if isinstance(config_snapshot_raw, dict) else {}
+
+    return {
+        "schema_version": int(payload.get("schema_version", METRICS_PAYLOAD_SCHEMA_VERSION)),
+        "generated_at_utc": str(payload.get("generated_at_utc", "")),
+        "seed": payload.get("seed"),
+        "step_count": int(payload.get("step_count", 0)),
+        "initial_tree_cells": int(payload.get("initial_tree_cells", 0)),
+        "burning_cells_t": [max(0, int(value)) for value in payload.get("burning_cells_t", [])],
+        "final_counts": {str(key): int(value) for key, value in final_counts.items()},
+        "metrics": {str(key): value for key, value in metrics.items()},
+        "config_snapshot": {str(key): value for key, value in config_snapshot.items()},
+    }
