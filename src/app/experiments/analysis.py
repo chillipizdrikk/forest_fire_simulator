@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from random import Random
 from statistics import mean
 from typing import Any
 
@@ -20,6 +21,32 @@ def _percentile(values: list[float], q: float) -> float:
     ordered = sorted(values)
     idx = int((len(ordered) - 1) * q)
     return float(ordered[idx])
+
+
+def _bootstrap_mean_ci(
+    values: list[float],
+    *,
+    confidence: float = 0.95,
+    n_resamples: int = 2000,
+    seed: int = 42,
+) -> tuple[float, float]:
+    if not values:
+        return 0.0, 0.0
+    if len(values) == 1:
+        value = float(values[0])
+        return value, value
+
+    rng = Random(seed)
+    n = len(values)
+    sample_means = []
+    for _ in range(n_resamples):
+        sample = [values[rng.randrange(n)] for _ in range(n)]
+        sample_means.append(float(mean(sample)))
+
+    alpha = (1.0 - confidence) / 2.0
+    ci_low = _percentile(sample_means, alpha)
+    ci_high = _percentile(sample_means, 1.0 - alpha)
+    return ci_low, ci_high
 
 
 def analyze_results(rows: list[dict[str, Any]], *, ranking_metric: str = "auc_normalized_mean") -> AnalysisSummary:
@@ -44,9 +71,12 @@ def analyze_results(rows: list[dict[str, Any]], *, ranking_metric: str = "auc_no
         local_auc = [float(item.get("auc", 0.0)) for item in items]
         local_peak_norm = [float(item.get("peak_fire_fraction", 0.0)) for item in items]
         local_auc_norm = [float(item.get("auc_normalized", 0.0)) for item in items]
+        baf_mean_ci_low, baf_mean_ci_high = _bootstrap_mean_ci(local_baf, confidence=0.95)
         scenario_stats[scenario_name] = {
             "runs": len(items),
             "baf_mean": float(mean(local_baf)) if local_baf else 0.0,
+            "baf_mean_ci_low": baf_mean_ci_low,
+            "baf_mean_ci_high": baf_mean_ci_high,
             "baf_p95": _percentile(local_baf, 0.95),
             "peak_fire_size_mean": float(mean(local_peak)) if local_peak else 0.0,
             "auc_mean": float(mean(local_auc)) if local_auc else 0.0,
@@ -138,6 +168,32 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         key=lambda item: item[1],
         reverse=True,
     )[:3]
+    top_worst_abs_baf_with_ci = sorted(
+        (
+            (
+                name,
+                float(stats.get("baf_mean", 0.0)),
+                float(stats.get("baf_mean_ci_low", 0.0)),
+                float(stats.get("baf_mean_ci_high", 0.0)),
+            )
+            for name, stats in summary.by_scenario.items()
+        ),
+        key=lambda item: item[1],
+        reverse=True,
+    )[:3]
+    top_worst_conservative_baf = sorted(
+        (
+            (
+                name,
+                float(stats.get("baf_mean", 0.0)),
+                float(stats.get("baf_mean_ci_low", 0.0)),
+                float(stats.get("baf_mean_ci_high", 0.0)),
+            )
+            for name, stats in summary.by_scenario.items()
+        ),
+        key=lambda item: item[3],
+        reverse=True,
+    )[:3]
     top_worst_abs_auc = sorted(
         ((name, float(stats.get("auc_mean", 0.0))) for name, stats in summary.by_scenario.items()),
         key=lambda item: item[1],
@@ -170,9 +226,15 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
 
     md_lines.append("")
     md_lines.append("## Absolute KPI ranking")
-    md_lines.append("### Mean burned area fraction (absolute)")
+    md_lines.append("### Mean burned area fraction (absolute, point estimate)")
     for name, score in top_worst_abs_baf:
         md_lines.append(f"- {name}: {score:.4f}")
+    md_lines.append("### Mean burned area fraction (95% bootstrap CI)")
+    for name, baf_mean, ci_low, ci_high in top_worst_abs_baf_with_ci:
+        md_lines.append(f"- {name}: {baf_mean:.4f} (95% CI: {ci_low:.4f}..{ci_high:.4f})")
+    md_lines.append("### Conservative risk ranking (mean BAF upper 95% CI bound)")
+    for name, baf_mean, ci_low, ci_high in top_worst_conservative_baf:
+        md_lines.append(f"- {name}: upper_ci={ci_high:.4f} (mean={baf_mean:.4f}, 95% CI: {ci_low:.4f}..{ci_high:.4f})")
     md_lines.append("### Mean AUC (absolute)")
     for name, score in top_worst_abs_auc:
         md_lines.append(f"- {name}: {score:.4f}")
@@ -217,9 +279,17 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
     html_lines.append("</ol>")
     html_lines.append("<h2>Absolute KPI ranking</h2>")
-    html_lines.append("<h3>Mean burned area fraction (absolute)</h3><ol>")
+    html_lines.append("<h3>Mean burned area fraction (absolute, point estimate)</h3><ol>")
     for name, score in top_worst_abs_baf:
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
+    html_lines.append("</ol><h3>Mean burned area fraction (95% bootstrap CI)</h3><ol>")
+    for name, baf_mean, ci_low, ci_high in top_worst_abs_baf_with_ci:
+        html_lines.append(f"<li>{name}: {baf_mean:.4f} (95% CI: {ci_low:.4f}..{ci_high:.4f})</li>")
+    html_lines.append("</ol><h3>Conservative risk ranking (mean BAF upper 95% CI bound)</h3><ol>")
+    for name, baf_mean, ci_low, ci_high in top_worst_conservative_baf:
+        html_lines.append(
+            f"<li>{name}: upper_ci={ci_high:.4f} (mean={baf_mean:.4f}, 95% CI: {ci_low:.4f}..{ci_high:.4f})</li>"
+        )
     html_lines.append("</ol><h3>Mean AUC (absolute)</h3><ol>")
     for name, score in top_worst_abs_auc:
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
