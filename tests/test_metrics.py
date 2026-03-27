@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import math
 from pathlib import Path
 
@@ -19,6 +20,9 @@ calculate_fire_metrics = metrics.calculate_fire_metrics
 time_to_extinguish = metrics.time_to_extinguish
 max_spread_rate = metrics.max_spread_rate
 calculate_derived_metrics = metrics.calculate_derived_metrics
+metrics_to_json = metrics.metrics_to_json
+read_metrics_payload = metrics.read_metrics_payload
+METRICS_PAYLOAD_SCHEMA_VERSION = metrics.METRICS_PAYLOAD_SCHEMA_VERSION
 
 
 def test_peak_fire_size_returns_zero_for_empty_series() -> None:
@@ -143,3 +147,66 @@ def test_calculate_derived_metrics_includes_critical_and_steps_total() -> None:
         "auc_normalized": 1 / 6,
         "critical": True,
     }
+
+
+def test_read_metrics_payload_is_backward_compatible_for_legacy_payload() -> None:
+    legacy_payload = {
+        "initial_tree_cells": 4,
+        "burning_cells_t": [0, 1.9, -3, 2],
+        "final_counts": {"burnt": 2.8, "empty": 1},
+        "metrics": {"baf": 0.5, "auc": 3},
+    }
+
+    normalized = read_metrics_payload(legacy_payload)
+
+    assert normalized == {
+        "schema_version": METRICS_PAYLOAD_SCHEMA_VERSION,
+        "generated_at_utc": "",
+        "seed": None,
+        "step_count": 0,
+        "initial_tree_cells": 4,
+        "burning_cells_t": [0, 1, 0, 2],
+        "final_counts": {"burnt": 2, "empty": 1},
+        "metrics": {"baf": 0.5, "auc": 3},
+        "config_snapshot": {},
+    }
+
+
+def test_metrics_to_json_produces_stable_structure_with_new_payload_fields() -> None:
+    payload = {
+        "metrics": {"auc": 3, "baf": 0.5},
+        "final_counts": {"burnt": 2, "empty": 1},
+        "burning_cells_t": [0, 1, 2],
+        "initial_tree_cells": 4,
+        "schema_version": METRICS_PAYLOAD_SCHEMA_VERSION,
+        "generated_at_utc": "2026-03-27T12:00:00Z",
+        "seed": 42,
+        "step_count": 3,
+        "config_snapshot": {
+            "humidity": 0.25,
+            "wind_enabled": True,
+        },
+    }
+
+    first = metrics_to_json(payload)
+    second = metrics_to_json(dict(reversed(list(payload.items()))))
+
+    assert first == second
+
+    decoded = json.loads(first)
+    assert list(decoded.keys()) == [
+        "burning_cells_t",
+        "config_snapshot",
+        "final_counts",
+        "generated_at_utc",
+        "initial_tree_cells",
+        "metrics",
+        "schema_version",
+        "seed",
+        "step_count",
+    ]
+    assert decoded["schema_version"] == METRICS_PAYLOAD_SCHEMA_VERSION
+    assert decoded["generated_at_utc"] == "2026-03-27T12:00:00Z"
+    assert decoded["seed"] == 42
+    assert decoded["step_count"] == 3
+    assert decoded["config_snapshot"] == {"humidity": 0.25, "wind_enabled": True}

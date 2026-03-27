@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import numpy as np
 
 from src.app.core.config import CAConfig
@@ -16,6 +17,7 @@ from src.app.core.constants import (
     TREE_STATES,
 )
 from src.app.core.metrics import calculate_fire_metrics, metrics_to_json
+from src.app.core.metrics import METRICS_PAYLOAD_SCHEMA_VERSION
 
 
 class ForestFireCA:
@@ -104,11 +106,41 @@ class ForestFireCA:
         return self.latest_metrics
 
     def metrics_payload(self) -> dict[str, object]:
+        config_snapshot = {
+            "width": int(self.cfg.width),
+            "height": int(self.cfg.height),
+            "f": float(self.cfg.f),
+            "lightning_enabled": bool(self.cfg.lightning_enabled),
+            "lightning_max_strikes_per_event": int(self.cfg.lightning_max_strikes_per_event),
+            "lightning_cooldown_steps": int(self.cfg.lightning_cooldown_steps),
+            "humidity": float(self.cfg.humidity),
+            "temperature_c": float(self.cfg.temperature_c),
+            "wind_enabled": bool(self.cfg.wind_enabled),
+            "wind_dir": str(self.cfg.wind_dir),
+            "wind_strength": float(self.cfg.wind_strength),
+            "init_tree_density": float(self.cfg.init_tree_density),
+            "conifer_ratio": float(self.cfg.conifer_ratio),
+            "flamm_decid": float(self.cfg.flamm_decid),
+            "flamm_conif": float(self.cfg.flamm_conif),
+            "burn_stage_factors": [float(v) for v in self.cfg.burn_stage_factors],
+            "rain_enabled": bool(self.cfg.rain_enabled),
+            "rain_intensity": float(self.cfg.rain_intensity),
+            "rain_scenario_enabled": bool(self.cfg.rain_scenario_enabled),
+            "rain_scenario_start_step": int(self.cfg.rain_scenario_start_step),
+            "rain_scenario_end_step": int(self.cfg.rain_scenario_end_step),
+            "rain_scenario_intensity": float(self.cfg.rain_scenario_intensity),
+        }
+
         return {
+            "schema_version": METRICS_PAYLOAD_SCHEMA_VERSION,
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "seed": self.cfg.seed,
+            "step_count": int(self.step_count),
             "initial_tree_cells": int(self.initial_tree_cells),
             "burning_cells_t": [int(v) for v in self.burning_cells_history],
             "final_counts": {key: int(value) for key, value in self.final_counts.items()},
             "metrics": dict(self.latest_metrics),
+            "config_snapshot": config_snapshot,
         }
 
     def metrics_payload_json(self) -> str:
