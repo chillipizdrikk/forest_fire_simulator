@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import importlib
 import json
 from pathlib import Path
 from typing import Any
@@ -97,9 +98,8 @@ def load_scenarios(path: str | Path) -> tuple[dict[str, Any], list[ScenarioDefin
     raw_text = Path(path).read_text(encoding="utf-8")
 
     try:
-        import yaml
-
-        content = yaml.safe_load(raw_text)
+        yaml_module = importlib.import_module("yaml")
+        content = yaml_module.safe_load(raw_text)
     except ModuleNotFoundError:
         try:
             content = json.loads(raw_text)
