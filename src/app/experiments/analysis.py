@@ -168,6 +168,14 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     figures = _save_plots(rows, output_dir / "figures")
 
     top_worst = summary.scenario_ranking[:3]
+    ranking_metric = str(summary.overall.get("scenario_ranking_metric", "auc_normalized_mean"))
+    ranking_metric_labels = {
+        "auc_normalized_mean": "Mean auc_normalized (normalized)",
+        "peak_fire_fraction_mean": "Mean peak_fire_fraction (normalized)",
+        "auc_mean": "Mean AUC (absolute)",
+        "baf_mean": "Mean burned area fraction (absolute, point estimate)",
+    }
+    ranking_metric_label = ranking_metric_labels.get(ranking_metric, f"Mean {ranking_metric}")
     top_worst_abs_baf = sorted(
         ((name, float(stats.get("baf_mean", 0.0))) for name, stats in summary.by_scenario.items()),
         key=lambda item: item[1],
@@ -228,7 +236,7 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         ),
         f"- Scenario ranking metric: {summary.overall['scenario_ranking_metric']}",
         "",
-        "## Worst scenarios by normalized AUC (mean)",
+        f"## Worst scenarios by {ranking_metric_label}",
     ]
     for name, score in top_worst:
         md_lines.append(f"- {name}: {score:.4f}")
@@ -253,7 +261,7 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     md_lines.append("### Mean peak_fire_fraction (normalized)")
     for name, score in top_worst_norm_peak:
         md_lines.append(f"- {name}: {score:.4f}")
-    md_lines.append("### Mean auc_normalized (normalized)")
+    md_lines.append(f"### {ranking_metric_label}")
     for name, score in top_worst:
         md_lines.append(f"- {name}: {score:.4f}")
 
@@ -286,7 +294,7 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         ),
         f"<li>Scenario ranking metric: {summary.overall['scenario_ranking_metric']}</li>",
         "</ul>",
-        "<h2>Worst scenarios by normalized AUC</h2><ol>",
+        f"<h2>Worst scenarios by {ranking_metric_label}</h2><ol>",
     ]
     for name, score in top_worst:
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
@@ -311,7 +319,7 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     html_lines.append("<h3>Mean peak_fire_fraction (normalized)</h3><ol>")
     for name, score in top_worst_norm_peak:
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
-    html_lines.append("</ol><h3>Mean auc_normalized (normalized)</h3><ol>")
+    html_lines.append(f"</ol><h3>{ranking_metric_label}</h3><ol>")
     for name, score in top_worst:
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
     html_lines.append("</ol><h2>Top parameter-metric correlations</h2><ul>")
