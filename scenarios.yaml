@@ -35,3 +35,30 @@ scenarios:
       conifer_ratio: 0.8
       flamm_conif: 1.1
       flamm_decid: 0.75
+
+  - name: extreme_dry_heat
+    params:
+      humidity: 0.12
+      temperature_c: 32.0
+      wind_enabled: true
+      wind_strength: 0.7
+      rain_enabled: false
+      rain_intensity: 0.0
+
+  - name: extreme_wet_cool
+    params:
+      humidity: 0.7
+      temperature_c: 16.0
+      rain_enabled: true
+      rain_intensity: 0.6
+      wind_enabled: false
+      wind_strength: 0.2
+
+  - name: windy_rain_burst
+    params:
+      humidity: 0.28
+      temperature_c: 26.0
+      wind_enabled: true
+      wind_strength: 0.75
+      rain_enabled: true
+      rain_intensity: 0.35
