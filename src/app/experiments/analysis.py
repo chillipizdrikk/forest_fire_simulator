@@ -165,34 +165,108 @@ def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
     except Exception:
         return generated
 
-    baf_values = [float(r.get("baf", 0.0)) for r in rows]
-    fig = plt.figure(figsize=(6, 4))
-    plt.hist(baf_values, bins=20)
-    plt.title("Distribution of burned area fraction")
-    plt.xlabel("baf")
-    plt.ylabel("count")
-    hist_path = figures_dir / "baf_hist.png"
-    fig.tight_layout()
-    fig.savefig(hist_path)
-    plt.close(fig)
-    generated.append(hist_path)
-
     grouped: dict[str, list[float]] = {}
     for row in rows:
         grouped.setdefault(str(row["scenario"]), []).append(float(row.get("baf", 0.0)))
 
     labels = sorted(grouped.keys())
     values = [grouped[label] for label in labels]
-    if values:
+
+    # Global histogram (all scenarios mixed) with scenario means for quick orientation.
+    baf_values = [float(r.get("baf", 0.0)) for r in rows]
+    if baf_values:
         fig = plt.figure(figsize=(7, 4))
-        plt.boxplot(values, tick_labels=labels)
+        plt.hist(baf_values, bins=30, color="#7aa6c2", edgecolor="white", alpha=0.9)
+        for label in labels:
+            local = grouped.get(label, [])
+            if local:
+                plt.axvline(sum(local) / len(local), linestyle="--", linewidth=1.2, alpha=0.7, label=f"{label} mean")
+        plt.title("BAF distribution (all scenarios mixed)")
+        plt.xlabel("baf")
+        plt.ylabel("count")
+        if labels:
+            plt.legend(fontsize=8, ncol=2, frameon=False)
+        hist_path = figures_dir / "baf_hist.png"
+        fig.tight_layout()
+        fig.savefig(hist_path)
+        plt.close(fig)
+        generated.append(hist_path)
+
+    # Boxplot by scenario with better readability for longer labels.
+    if values:
+        fig = plt.figure(figsize=(max(8, len(labels) * 1.2), 4.8))
+        plt.boxplot(values, tick_labels=labels, showfliers=True)
         plt.title("Scenario comparison by burned area fraction")
         plt.ylabel("baf")
+        plt.ylim(-0.02, 1.02)
+        plt.xticks(rotation=20, ha="right")
+        plt.grid(axis="y", alpha=0.25, linestyle=":")
         box_path = figures_dir / "scenario_baf_boxplot.png"
         fig.tight_layout()
         fig.savefig(box_path)
         plt.close(fig)
         generated.append(box_path)
+
+    # Per-scenario histograms in a small-multiples layout for local interpretation.
+    if labels:
+        cols = min(3, len(labels))
+        rows_n = (len(labels) + cols - 1) // cols
+        fig, axes = plt.subplots(rows_n, cols, figsize=(4.6 * cols, 3.2 * rows_n), squeeze=False, sharex=True, sharey=False)
+        fixed_bins = [idx / 20 for idx in range(21)]
+        for idx, label in enumerate(labels):
+            ax = axes[idx // cols][idx % cols]
+            local = grouped[label]
+            ax.hist(local, bins=fixed_bins, color="#6bbf83", edgecolor="#f5f5f5", alpha=0.95, linewidth=0.8)
+            local_mean = sum(local) / len(local) if local else 0.0
+            ax.axvline(local_mean, color="#2b6f3e", linestyle="--", linewidth=1.2)
+            ax.set_title(label)
+            ax.set_xlim(-0.02, 1.02)
+            ax.grid(axis="y", alpha=0.2, linestyle=":")
+        for idx in range(len(labels), rows_n * cols):
+            ax = axes[idx // cols][idx % cols]
+            ax.axis("off")
+        fig.suptitle("BAF distribution per scenario", y=1.02)
+        for ax in axes[-1]:
+            ax.set_xlabel("baf")
+        for row_axes in axes:
+            row_axes[0].set_ylabel("count")
+        scenario_hist_path = figures_dir / "scenario_baf_hist_grid.png"
+        fig.tight_layout()
+        fig.savefig(scenario_hist_path)
+        plt.close(fig)
+        generated.append(scenario_hist_path)
+
+    # Scenario-wise mean and uncertainty (p25-p75) for fast comparison.
+    if values:
+        means = []
+        p25 = []
+        p75 = []
+        for label in labels:
+            local_sorted = sorted(grouped[label])
+            n = len(local_sorted)
+            means.append(sum(local_sorted) / n)
+            i25 = int((n - 1) * 0.25)
+            i75 = int((n - 1) * 0.75)
+            p25.append(local_sorted[i25])
+            p75.append(local_sorted[i75])
+
+        fig = plt.figure(figsize=(max(8, len(labels) * 1.2), 4.6))
+        x = list(range(len(labels)))
+        # Mean may sit outside IQR in skewed distributions, which would yield negative
+        # error bars and break matplotlib. Clamp to zero for one-sided spread.
+        lower_err = [max(0.0, m - q1) for m, q1 in zip(means, p25)]
+        upper_err = [max(0.0, q3 - m) for m, q3 in zip(means, p75)]
+        plt.errorbar(x, means, yerr=[lower_err, upper_err], fmt="o", capsize=4, color="#1f4e79")
+        plt.xticks(x, labels, rotation=20, ha="right")
+        plt.ylim(-0.02, 1.02)
+        plt.ylabel("baf")
+        plt.title("Scenario mean BAF with interquartile range")
+        plt.grid(axis="y", alpha=0.25, linestyle=":")
+        summary_path = figures_dir / "scenario_baf_mean_iqr.png"
+        fig.tight_layout()
+        fig.savefig(summary_path)
+        plt.close(fig)
+        generated.append(summary_path)
 
     return generated
 
@@ -327,8 +401,20 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     if figures:
         md_lines.append("")
         md_lines.append("## Figures")
+        figure_notes = {
+            "baf_hist": "Global BAF histogram across all scenarios; dashed lines mark per-scenario means.",
+            "scenario_baf_boxplot": "Per-scenario BAF boxplots (median, IQR, outliers). Useful for ranking spread and stability.",
+            "scenario_baf_hist_grid": (
+                "Small-multiple histograms with fixed BAF bins and per-panel y-scale: "
+                "each panel shows one scenario distribution."
+            ),
+            "scenario_baf_mean_iqr": "Scenario mean BAF with interquartile range as asymmetric error bars.",
+        }
         for fig_path in figures:
             rel = fig_path.relative_to(output_dir)
+            note = figure_notes.get(fig_path.stem, "")
+            if note:
+                md_lines.append(f"- {fig_path.stem}: {note}")
             md_lines.append(f"![{fig_path.stem}]({rel.as_posix()})")
 
     md_path.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
@@ -402,9 +488,22 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
 
     if figures:
         html_lines.append("<h2>Figures</h2>")
+        figure_notes = {
+            "baf_hist": "Global BAF histogram across all scenarios; dashed lines mark per-scenario means.",
+            "scenario_baf_boxplot": "Per-scenario BAF boxplots (median, IQR, outliers).",
+            "scenario_baf_hist_grid": (
+                "Small-multiple histograms with fixed BAF bins and per-panel y-scale: "
+                "each panel shows one scenario distribution."
+            ),
+            "scenario_baf_mean_iqr": "Scenario mean BAF with interquartile range as asymmetric error bars.",
+        }
         for fig_path in figures:
             rel = fig_path.relative_to(output_dir)
-            html_lines.append(f"<figure><img src='{rel.as_posix()}' alt='{fig_path.stem}' width='600'></figure>")
+            note = figure_notes.get(fig_path.stem, "")
+            caption = f"<figcaption>{note}</figcaption>" if note else ""
+            html_lines.append(
+                f"<figure><img src='{rel.as_posix()}' alt='{fig_path.stem}' width='760'>{caption}</figure>"
+            )
 
     html_lines.append("</body></html>")
     html_path.write_text("\n".join(html_lines) + "\n", encoding="utf-8")
