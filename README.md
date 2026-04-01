@@ -33,6 +33,24 @@ python -m src.app.main
 python run_experiments.py --n 100 --seed 42
 ```
 
+### Recommended experiment patterns
+
+- Keep the same `--n` across all comparisons (for fair scenario ranking):
+
+```bash
+python run_experiments.py --n 100 --seed 42
+```
+
+- Run several batch replicas with different seeds to validate ranking stability:
+
+```bash
+for s in 42 43 44 45 46; do
+  python run_experiments.py --n 100 --seed "$s" \
+    --results-dir "results/raw/seed_$s" \
+    --reports-dir "reports/seed_$s"
+done
+```
+
 Outputs:
 
 - Raw results: `results/raw/experiment_results_<timestamp>.csv`
