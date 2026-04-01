@@ -211,11 +211,12 @@ def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
     if labels:
         cols = min(3, len(labels))
         rows_n = (len(labels) + cols - 1) // cols
-        fig, axes = plt.subplots(rows_n, cols, figsize=(4.6 * cols, 3.2 * rows_n), squeeze=False, sharex=True, sharey=True)
+        fig, axes = plt.subplots(rows_n, cols, figsize=(4.6 * cols, 3.2 * rows_n), squeeze=False, sharex=True, sharey=False)
+        fixed_bins = [idx / 20 for idx in range(21)]
         for idx, label in enumerate(labels):
             ax = axes[idx // cols][idx % cols]
             local = grouped[label]
-            ax.hist(local, bins=20, color="#6bbf83", edgecolor="white", alpha=0.9)
+            ax.hist(local, bins=fixed_bins, color="#6bbf83", edgecolor="#f5f5f5", alpha=0.95, linewidth=0.8)
             local_mean = sum(local) / len(local) if local else 0.0
             ax.axvline(local_mean, color="#2b6f3e", linestyle="--", linewidth=1.2)
             ax.set_title(label)
@@ -403,7 +404,10 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         figure_notes = {
             "baf_hist": "Global BAF histogram across all scenarios; dashed lines mark per-scenario means.",
             "scenario_baf_boxplot": "Per-scenario BAF boxplots (median, IQR, outliers). Useful for ranking spread and stability.",
-            "scenario_baf_hist_grid": "Small-multiple histograms: each panel shows one scenario distribution.",
+            "scenario_baf_hist_grid": (
+                "Small-multiple histograms with fixed BAF bins and per-panel y-scale: "
+                "each panel shows one scenario distribution."
+            ),
             "scenario_baf_mean_iqr": "Scenario mean BAF with interquartile range as asymmetric error bars.",
         }
         for fig_path in figures:
@@ -487,7 +491,10 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         figure_notes = {
             "baf_hist": "Global BAF histogram across all scenarios; dashed lines mark per-scenario means.",
             "scenario_baf_boxplot": "Per-scenario BAF boxplots (median, IQR, outliers).",
-            "scenario_baf_hist_grid": "Small-multiple histograms: each panel shows one scenario distribution.",
+            "scenario_baf_hist_grid": (
+                "Small-multiple histograms with fixed BAF bins and per-panel y-scale: "
+                "each panel shows one scenario distribution."
+            ),
             "scenario_baf_mean_iqr": "Scenario mean BAF with interquartile range as asymmetric error bars.",
         }
         for fig_path in figures:
