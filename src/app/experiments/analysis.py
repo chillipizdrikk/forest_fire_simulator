@@ -251,8 +251,10 @@ def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
 
         fig = plt.figure(figsize=(max(8, len(labels) * 1.2), 4.6))
         x = list(range(len(labels)))
-        lower_err = [m - q1 for m, q1 in zip(means, p25)]
-        upper_err = [q3 - m for m, q3 in zip(means, p75)]
+        # Mean may sit outside IQR in skewed distributions, which would yield negative
+        # error bars and break matplotlib. Clamp to zero for one-sided spread.
+        lower_err = [max(0.0, m - q1) for m, q1 in zip(means, p25)]
+        upper_err = [max(0.0, q3 - m) for m, q3 in zip(means, p75)]
         plt.errorbar(x, means, yerr=[lower_err, upper_err], fmt="o", capsize=4, color="#1f4e79")
         plt.xticks(x, labels, rotation=20, ha="right")
         plt.ylim(-0.02, 1.02)
