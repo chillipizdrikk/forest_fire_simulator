@@ -2,13 +2,16 @@
 <h1>Forest fire experiments report</h1>
 <h2>Overall</h2>
 <ul>
-<li>Total runs: 400</li>
-<li>Mean burned area fraction: 0.7473</li>
-<li>Burned area p95/p99: 0.9998 / 1.0000</li>
-<li>Catastrophic probability (baf &gt;= 0.8): 0.7500</li>
+<li>Total runs: 700</li>
+<li>Mean burned area fraction: 0.5572</li>
+<li>Burned area p95/p99: 0.9998 / 0.9999</li>
+<li>Critical BAF threshold used: 0.8000</li>
+<li>Catastrophic probability (baf &gt;= 0.8000): 0.5557</li>
 <li>Scenario ranking metric: auc_normalized_mean</li>
+<li>Censored runs (truncated by max_steps): 9 (0.0129)</li>
+<li>Note: censored runs can bias metrics: fire_duration and AUC are typically underestimated, while BAF-related risk can be understated when fire is still active at truncation.</li>
 </ul>
-<h2>Worst scenarios by normalized AUC</h2><ol>
+<h2>Worst scenarios by Mean auc_normalized (normalized)</h2><ol>
 <li>baseline: 0.0343</li>
 <li>high_conifer: 0.0321</li>
 <li>dry_windy: 0.0190</li>
@@ -41,12 +44,27 @@
 <li>high_conifer: 0.0321</li>
 <li>dry_windy: 0.0190</li>
 </ol><h2>Top parameter-metric correlations</h2><ul>
-<li>param_temperature_c vs baf: 0.9999</li>
-<li>param_rain_enabled vs baf: -0.9999</li>
-<li>param_rain_intensity vs baf: -0.9999</li>
-<li>param_humidity vs baf: -0.9389</li>
-<li>param_humidity vs fire_duration: -0.9151</li>
+<li>param_rain_enabled vs baf: -0.9916</li>
+<li>param_rain_intensity vs baf: -0.9450</li>
+<li>param_rain_enabled vs max_spread_rate: -0.9309</li>
+<li>param_rain_enabled vs peak_fire_size: -0.8937</li>
+<li>param_rain_intensity vs max_spread_rate: -0.8936</li>
 </ul>
+<h2>Scenario-local top parameter-metric correlations</h2>
+<h3>baseline</h3>
+<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<h3>dry_windy</h3>
+<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<h3>extreme_dry_heat</h3>
+<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<h3>extreme_wet_cool</h3>
+<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<h3>high_conifer</h3>
+<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<h3>wet_cool</h3>
+<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<h3>windy_rain_burst</h3>
+<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
 <h2>Figures</h2>
 <figure><img src='figures/baf_hist.png' alt='baf_hist' width='600'></figure>
 <figure><img src='figures/scenario_baf_boxplot.png' alt='scenario_baf_boxplot' width='600'></figure>

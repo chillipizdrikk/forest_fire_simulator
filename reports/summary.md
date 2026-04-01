@@ -1,13 +1,16 @@
 # Forest fire experiments report
 
 ## Overall
-- Total runs: 400
-- Mean burned area fraction: 0.7473
-- Burned area p95/p99: 0.9998 / 1.0000
-- Catastrophic probability (baf >= 0.8): 0.7500
+- Total runs: 700
+- Mean burned area fraction: 0.5572
+- Burned area p95/p99: 0.9998 / 0.9999
+- Critical BAF threshold used: 0.8000
+- Catastrophic probability (baf >= 0.8000): 0.5557
 - Scenario ranking metric: auc_normalized_mean
+- Censored runs (truncated by max_steps): 9 (0.0129)
+- Note: censored runs can bias metrics: fire_duration and AUC are typically underestimated, while BAF-related risk can be understated when fire is still active at truncation.
 
-## Worst scenarios by normalized AUC (mean)
+## Worst scenarios by Mean auc_normalized (normalized)
 - baseline: 0.0343
 - high_conifer: 0.0321
 - dry_windy: 0.0190
@@ -41,11 +44,27 @@
 - dry_windy: 0.0190
 
 ## Top parameter-metric correlations
-- param_temperature_c vs baf: 0.9999
-- param_rain_enabled vs baf: -0.9999
-- param_rain_intensity vs baf: -0.9999
-- param_humidity vs baf: -0.9389
-- param_humidity vs fire_duration: -0.9151
+- param_rain_enabled vs baf: -0.9916
+- param_rain_intensity vs baf: -0.9450
+- param_rain_enabled vs max_spread_rate: -0.9309
+- param_rain_enabled vs peak_fire_size: -0.8937
+- param_rain_intensity vs max_spread_rate: -0.8936
+
+## Scenario-local top parameter-metric correlations
+### baseline
+- Not enough runs for per-scenario correlation estimation (minimum 5 runs).
+### dry_windy
+- Not enough runs for per-scenario correlation estimation (minimum 5 runs).
+### extreme_dry_heat
+- Not enough runs for per-scenario correlation estimation (minimum 5 runs).
+### extreme_wet_cool
+- Not enough runs for per-scenario correlation estimation (minimum 5 runs).
+### high_conifer
+- Not enough runs for per-scenario correlation estimation (minimum 5 runs).
+### wet_cool
+- Not enough runs for per-scenario correlation estimation (minimum 5 runs).
+### windy_rain_burst
+- Not enough runs for per-scenario correlation estimation (minimum 5 runs).
 
 ## Figures
 ![baf_hist](figures/baf_hist.png)
