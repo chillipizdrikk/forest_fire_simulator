@@ -57,6 +57,8 @@ def analyze_results(
         by_scenario.setdefault(str(row["scenario"]), []).append(row)
 
     baf_values = [float(row.get("baf", 0.0)) for row in rows]
+    censored_runs_count = int(sum(bool(row.get("truncated_by_max_steps", False)) for row in rows))
+    censored_runs_share = float(censored_runs_count / len(rows)) if rows else 0.0
     overall = {
         "runs_total": len(rows),
         "baf_mean": float(mean(baf_values)) if baf_values else 0.0,
@@ -67,6 +69,8 @@ def analyze_results(
         ),
         "critical_baf_threshold": critical_baf_threshold,
         "scenario_ranking_metric": ranking_metric,
+        "censored_runs_count": censored_runs_count,
+        "censored_runs_share": censored_runs_share,
     }
 
     scenario_stats: dict[str, dict[str, Any]] = {}
@@ -235,6 +239,14 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
             f"{summary.overall['catastrophic_probability']:.4f}"
         ),
         f"- Scenario ranking metric: {summary.overall['scenario_ranking_metric']}",
+        (
+            f"- Censored runs (truncated by max_steps): {summary.overall['censored_runs_count']} "
+            f"({summary.overall['censored_runs_share']:.4f})"
+        ),
+        (
+            "- Note: censored runs can bias metrics: fire_duration and AUC are typically underestimated, "
+            "while BAF-related risk can be understated when fire is still active at truncation."
+        ),
         "",
         f"## Worst scenarios by {ranking_metric_label}",
     ]
@@ -293,6 +305,14 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
             f"{summary.overall['catastrophic_probability']:.4f}</li>"
         ),
         f"<li>Scenario ranking metric: {summary.overall['scenario_ranking_metric']}</li>",
+        (
+            f"<li>Censored runs (truncated by max_steps): {summary.overall['censored_runs_count']} "
+            f"({summary.overall['censored_runs_share']:.4f})</li>"
+        ),
+        (
+            "<li>Note: censored runs can bias metrics: fire_duration and AUC are typically underestimated, "
+            "while BAF-related risk can be understated when fire is still active at truncation.</li>"
+        ),
         "</ul>",
         f"<h2>Worst scenarios by {ranking_metric_label}</h2><ol>",
     ]
