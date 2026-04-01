@@ -13,6 +13,7 @@ class AnalysisSummary:
     by_scenario: dict[str, dict[str, Any]]
     scenario_ranking: list[tuple[str, float]]
     correlations: list[tuple[str, str, float]]
+    correlations_by_scenario: dict[str, list[tuple[str, str, float]]]
 
 
 def _percentile(values: list[float], q: float) -> float:
@@ -50,7 +51,12 @@ def _bootstrap_mean_ci(
 
 
 def analyze_results(
-    rows: list[dict[str, Any]], *, ranking_metric: str = "auc_normalized_mean", critical_baf_threshold: float = 0.8
+    rows: list[dict[str, Any]],
+    *,
+    ranking_metric: str = "auc_normalized_mean",
+    critical_baf_threshold: float = 0.8,
+    correlation_top_n: int = 10,
+    scenario_correlation_min_runs: int = 5,
 ) -> AnalysisSummary:
     by_scenario: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
@@ -102,10 +108,37 @@ def analyze_results(
         reverse=True,
     )
 
-    correlations: list[tuple[str, str, float]] = []
     numeric_param_keys = sorted({key for row in rows for key in row if key.startswith("param_") and isinstance(row[key], (int, float))})
     metric_keys = ["baf", "peak_fire_size", "fire_duration", "max_spread_rate", "time_to_extinguish"]
+    correlations = _collect_top_correlations(rows, numeric_param_keys, metric_keys, top_n=correlation_top_n)
+    correlations_by_scenario: dict[str, list[tuple[str, str, float]]] = {}
+    for scenario_name, scenario_rows in by_scenario.items():
+        if len(scenario_rows) < scenario_correlation_min_runs:
+            continue
+        correlations_by_scenario[scenario_name] = _collect_top_correlations(
+            scenario_rows,
+            numeric_param_keys,
+            metric_keys,
+            top_n=correlation_top_n,
+        )
 
+    return AnalysisSummary(
+        overall=overall,
+        by_scenario=scenario_stats,
+        scenario_ranking=ranking,
+        correlations=correlations,
+        correlations_by_scenario=correlations_by_scenario,
+    )
+
+
+def _collect_top_correlations(
+    rows: list[dict[str, Any]],
+    numeric_param_keys: list[str],
+    metric_keys: list[str],
+    *,
+    top_n: int,
+) -> list[tuple[str, str, float]]:
+    correlations: list[tuple[str, str, float]] = []
     for pkey in numeric_param_keys:
         px = [float(row.get(pkey, 0.0)) for row in rows]
         p_mean = mean(px) if px else 0.0
@@ -119,11 +152,9 @@ def analyze_results(
             if m_std == 0:
                 continue
             cov = sum((x - p_mean) * (y - m_mean) for x, y in zip(px, my)) / len(px)
-            corr = cov / (p_std * m_std)
-            correlations.append((pkey, mkey, float(corr)))
-
+            correlations.append((pkey, mkey, float(cov / (p_std * m_std))))
     correlations.sort(key=lambda item: abs(item[2]), reverse=True)
-    return AnalysisSummary(overall=overall, by_scenario=scenario_stats, scenario_ranking=ranking, correlations=correlations[:10])
+    return correlations[:top_n]
 
 
 def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
@@ -222,6 +253,7 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         reverse=True,
     )[:3]
     top_corr = summary.correlations[:5]
+    sorted_scenario_names = sorted(summary.by_scenario.keys())
 
     md_path = output_dir / "summary.md"
     html_path = output_dir / "summary.html"
@@ -281,6 +313,16 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     md_lines.append("## Top parameter-metric correlations")
     for pkey, mkey, corr in top_corr:
         md_lines.append(f"- {pkey} vs {mkey}: {corr:.4f}")
+    md_lines.append("")
+    md_lines.append("## Scenario-local top parameter-metric correlations")
+    for scenario_name in sorted_scenario_names:
+        scenario_corr = summary.correlations_by_scenario.get(scenario_name)
+        md_lines.append(f"### {scenario_name}")
+        if scenario_corr:
+            for pkey, mkey, corr in scenario_corr[:5]:
+                md_lines.append(f"- {pkey} vs {mkey}: {corr:.4f}")
+        else:
+            md_lines.append("- Not enough runs for per-scenario correlation estimation (minimum 5 runs).")
 
     if figures:
         md_lines.append("")
@@ -346,6 +388,17 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     for pkey, mkey, corr in top_corr:
         html_lines.append(f"<li>{pkey} vs {mkey}: {corr:.4f}</li>")
     html_lines.append("</ul>")
+    html_lines.append("<h2>Scenario-local top parameter-metric correlations</h2>")
+    for scenario_name in sorted_scenario_names:
+        scenario_corr = summary.correlations_by_scenario.get(scenario_name)
+        html_lines.append(f"<h3>{scenario_name}</h3>")
+        if scenario_corr:
+            html_lines.append("<ul>")
+            for pkey, mkey, corr in scenario_corr[:5]:
+                html_lines.append(f"<li>{pkey} vs {mkey}: {corr:.4f}</li>")
+            html_lines.append("</ul>")
+        else:
+            html_lines.append("<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>")
 
     if figures:
         html_lines.append("<h2>Figures</h2>")
