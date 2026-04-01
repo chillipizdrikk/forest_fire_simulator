@@ -33,16 +33,21 @@ def _simulate_single_run(cfg: CAConfig, max_steps: int, critical_baf_threshold: 
     ca.ignite(ignite_row, ignite_col)
 
     fire_started = ca.has_active_fire()
+    loop_exhausted = True
     for _ in range(max_steps):
         if fire_started and not ca.has_active_fire():
+            loop_exhausted = False
             break
         ca.step()
         fire_started = fire_started or ca.has_active_fire()
+
+    truncated_by_max_steps = bool(loop_exhausted and fire_started and ca.has_active_fire())
 
     final_metrics = ca.finalize_run_metrics()
     series = [int(v) for v in ca.burning_cells_history]
 
     return {
+        "truncated_by_max_steps": truncated_by_max_steps,
         **final_metrics,
         **calculate_derived_metrics(
             burning_cells=series,
