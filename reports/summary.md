@@ -1,51 +1,51 @@
 # Forest fire experiments report
 
 ## Overall
-- Total runs: 40
-- Mean burned area fraction: 0.6523
-- Burned area p95/p99: 0.9999 / 1.0000
-- Catastrophic probability (baf >= 0.8): 0.6750
+- Total runs: 400
+- Mean burned area fraction: 0.7473
+- Burned area p95/p99: 0.9998 / 1.0000
+- Catastrophic probability (baf >= 0.8): 0.7500
 - Scenario ranking metric: auc_normalized_mean
 
 ## Worst scenarios by normalized AUC (mean)
-- baseline: 0.0373
-- high_conifer: 0.0364
-- dry_windy: 0.0222
+- baseline: 0.0343
+- high_conifer: 0.0321
+- dry_windy: 0.0190
 
 ## Absolute KPI ranking
 ### Mean burned area fraction (absolute, point estimate)
-- baseline: 0.9795
-- high_conifer: 0.8996
-- dry_windy: 0.7278
+- high_conifer: 0.9995
+- baseline: 0.9994
+- dry_windy: 0.9875
 ### Mean burned area fraction (95% bootstrap CI)
-- baseline: 0.9795 (95% CI: 0.9397..0.9995)
-- high_conifer: 0.8996 (95% CI: 0.6996..0.9997)
-- dry_windy: 0.7278 (95% CI: 0.5017..0.8895)
+- high_conifer: 0.9995 (95% CI: 0.9994..0.9996)
+- baseline: 0.9994 (95% CI: 0.9994..0.9995)
+- dry_windy: 0.9875 (95% CI: 0.9867..0.9882)
 ### Conservative risk ranking (mean BAF upper 95% CI bound)
-- high_conifer: upper_ci=0.9997 (mean=0.8996, 95% CI: 0.6996..0.9997)
-- baseline: upper_ci=0.9995 (mean=0.9795, 95% CI: 0.9397..0.9995)
-- dry_windy: upper_ci=0.8895 (mean=0.7278, 95% CI: 0.5017..0.8895)
+- high_conifer: upper_ci=0.9996 (mean=0.9995, 95% CI: 0.9994..0.9996)
+- baseline: upper_ci=0.9995 (mean=0.9994, 95% CI: 0.9994..0.9995)
+- dry_windy: upper_ci=0.9882 (mean=0.9875, 95% CI: 0.9867..0.9882)
 ### Mean AUC (absolute)
-- baseline: 29677.2000
-- high_conifer: 27291.6000
-- dry_windy: 22347.3000
+- high_conifer: 30252.3500
+- baseline: 30212.9000
+- dry_windy: 29853.2600
 
 ## Normalized KPI ranking
 ### Mean peak_fire_fraction (normalized)
-- baseline: 0.0835
-- high_conifer: 0.0763
-- dry_windy: 0.0513
+- baseline: 0.0769
+- high_conifer: 0.0733
+- dry_windy: 0.0534
 ### Mean auc_normalized (normalized)
-- baseline: 0.0373
-- high_conifer: 0.0364
-- dry_windy: 0.0222
+- baseline: 0.0343
+- high_conifer: 0.0321
+- dry_windy: 0.0190
 
 ## Top parameter-metric correlations
-- param_humidity vs time_to_extinguish: -0.8779
-- param_rain_enabled vs baf: -0.8486
-- param_rain_intensity vs baf: -0.8486
-- param_temperature_c vs baf: 0.8486
-- param_rain_enabled vs max_spread_rate: -0.8425
+- param_temperature_c vs baf: 0.9999
+- param_rain_enabled vs baf: -0.9999
+- param_rain_intensity vs baf: -0.9999
+- param_humidity vs baf: -0.9389
+- param_humidity vs fire_duration: -0.9151
 
 ## Figures
 ![baf_hist](figures/baf_hist.png)
