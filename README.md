@@ -67,6 +67,7 @@ Result schema includes:
 ## Metrics dictionary
 
 Єдиний контракт метрик описано в `src/app/core/metrics_schema.py`.
+Швидка шпаргалка українською: `docs/metrics_cheatsheet_uk.md`.
 
 Core-метрики (рахуються у `src/app/core/metrics.py`):
 
