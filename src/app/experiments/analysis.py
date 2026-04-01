@@ -49,7 +49,9 @@ def _bootstrap_mean_ci(
     return ci_low, ci_high
 
 
-def analyze_results(rows: list[dict[str, Any]], *, ranking_metric: str = "auc_normalized_mean") -> AnalysisSummary:
+def analyze_results(
+    rows: list[dict[str, Any]], *, ranking_metric: str = "auc_normalized_mean", critical_baf_threshold: float = 0.8
+) -> AnalysisSummary:
     by_scenario: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         by_scenario.setdefault(str(row["scenario"]), []).append(row)
@@ -60,7 +62,10 @@ def analyze_results(rows: list[dict[str, Any]], *, ranking_metric: str = "auc_no
         "baf_mean": float(mean(baf_values)) if baf_values else 0.0,
         "baf_p95": _percentile(baf_values, 0.95),
         "baf_p99": _percentile(baf_values, 0.99),
-        "catastrophic_probability": float(sum(v >= 0.8 for v in baf_values) / len(baf_values)) if baf_values else 0.0,
+        "catastrophic_probability": (
+            float(sum(v >= critical_baf_threshold for v in baf_values) / len(baf_values)) if baf_values else 0.0
+        ),
+        "critical_baf_threshold": critical_baf_threshold,
         "scenario_ranking_metric": ranking_metric,
     }
 
@@ -216,7 +221,11 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         f"- Total runs: {summary.overall['runs_total']}",
         f"- Mean burned area fraction: {summary.overall['baf_mean']:.4f}",
         f"- Burned area p95/p99: {summary.overall['baf_p95']:.4f} / {summary.overall['baf_p99']:.4f}",
-        f"- Catastrophic probability (baf >= 0.8): {summary.overall['catastrophic_probability']:.4f}",
+        f"- Critical BAF threshold used: {summary.overall['critical_baf_threshold']:.4f}",
+        (
+            f"- Catastrophic probability (baf >= {summary.overall['critical_baf_threshold']:.4f}): "
+            f"{summary.overall['catastrophic_probability']:.4f}"
+        ),
         f"- Scenario ranking metric: {summary.overall['scenario_ranking_metric']}",
         "",
         "## Worst scenarios by normalized AUC (mean)",
@@ -270,7 +279,11 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         f"<li>Total runs: {summary.overall['runs_total']}</li>",
         f"<li>Mean burned area fraction: {summary.overall['baf_mean']:.4f}</li>",
         f"<li>Burned area p95/p99: {summary.overall['baf_p95']:.4f} / {summary.overall['baf_p99']:.4f}</li>",
-        f"<li>Catastrophic probability (baf &gt;= 0.8): {summary.overall['catastrophic_probability']:.4f}</li>",
+        f"<li>Critical BAF threshold used: {summary.overall['critical_baf_threshold']:.4f}</li>",
+        (
+            f"<li>Catastrophic probability (baf &gt;= {summary.overall['critical_baf_threshold']:.4f}): "
+            f"{summary.overall['catastrophic_probability']:.4f}</li>"
+        ),
         f"<li>Scenario ranking metric: {summary.overall['scenario_ranking_metric']}</li>",
         "</ul>",
         "<h2>Worst scenarios by normalized AUC</h2><ol>",

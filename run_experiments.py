@@ -42,7 +42,7 @@ def main() -> None:
         row.update(item["metrics"])
         flattened_rows.append(row)
 
-    summary = analyze_results(flattened_rows)
+    summary = analyze_results(flattened_rows, critical_baf_threshold=args.critical_baf_threshold)
     md_path, html_path, _ = generate_report(flattened_rows, summary, Path(args.reports_dir))
 
     print(f"Results CSV: {csv_path}")
