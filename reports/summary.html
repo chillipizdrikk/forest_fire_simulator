@@ -3,68 +3,97 @@
 <h2>Overall</h2>
 <ul>
 <li>Total runs: 700</li>
-<li>Mean burned area fraction: 0.6222</li>
+<li>Mean burned area fraction (all / uncensored): 0.5572 / 0.5531</li>
+<li>Mean auc_normalized (all / uncensored): 0.0140 / 0.0142</li>
+<li>Mean time_to_extinguish (all / uncensored): 145.3357 / 140.7164</li>
+<li>Critical share (all / uncensored): 0.5557 / 0.5543</li>
 <li>Burned area p95/p99: 0.9998 / 0.9999</li>
 <li>Critical BAF threshold used: 0.8000</li>
-<li>Catastrophic probability (baf &gt;= 0.8000): 0.5729</li>
+<li>Catastrophic probability (baf &gt;= 0.8000): 0.5557</li>
 <li>Scenario ranking metric: auc_normalized_mean</li>
-<li>Censored runs (truncated by max_steps): 3 (0.0043)</li>
+<li>Censored runs (truncated by max_steps): 9 (0.0129)</li>
 <li>Note: censored runs can bias metrics: fire_duration and AUC are typically underestimated, while BAF-related risk can be understated when fire is still active at truncation.</li>
 </ul>
 <h2>Worst scenarios by Mean auc_normalized (normalized)</h2><ol>
 <li>baseline: 0.0343</li>
 <li>high_conifer: 0.0321</li>
-<li>extreme_dry_heat: 0.0208</li>
+<li>dry_windy: 0.0190</li>
 </ol>
 <h2>Absolute KPI ranking</h2>
 <h3>Mean burned area fraction (absolute, point estimate)</h3><ol>
 <li>high_conifer: 0.9995</li>
 <li>baseline: 0.9994</li>
-<li>extreme_dry_heat: 0.9935</li>
-</ol><h3>Mean burned area fraction (95% bootstrap CI)</h3><ol>
+<li>dry_windy: 0.9875</li>
+</ol><h3>KPI comparison by scenario (all / uncensored)</h3><ul>
+<li>baseline: baf=0.9994/0.9994, auc_normalized=0.0343/0.0343, time_to_extinguish=103.4300/103.4300, critical=1.0000/1.0000, censored_share=0.0000</li>
+<li>dry_windy: baf=0.9875/0.9876, auc_normalized=0.0190/0.0193, time_to_extinguish=169.9100/163.1735, critical=1.0000/1.0000, censored_share=0.0200</li>
+<li>extreme_dry_heat: baf=0.9105/0.9157, auc_normalized=0.0124/0.0130, time_to_extinguish=248.1600/229.2043, critical=0.8900/0.9140, censored_share=0.0700</li>
+<li>extreme_wet_cool: baf=0.0001/0.0001, auc_normalized=0.0000/0.0000, time_to_extinguish=124.8000/124.8000, critical=0.0000/0.0000, censored_share=0.0000</li>
+<li>high_conifer: baf=0.9995/0.9995, auc_normalized=0.0321/0.0321, time_to_extinguish=120.0000/120.0000, critical=1.0000/1.0000, censored_share=0.0000</li>
+<li>wet_cool: baf=0.0027/0.0027, auc_normalized=0.0002/0.0002, time_to_extinguish=119.8300/119.8300, critical=0.0000/0.0000, censored_share=0.0000</li>
+<li>windy_rain_burst: baf=0.0007/0.0007, auc_normalized=0.0001/0.0001, time_to_extinguish=131.2200/131.2200, critical=0.0000/0.0000, censored_share=0.0000</li>
+</ul>
+<h3>Mean burned area fraction (95% bootstrap CI)</h3><ol>
 <li>high_conifer: 0.9995 (95% CI: 0.9994..0.9996)</li>
 <li>baseline: 0.9994 (95% CI: 0.9994..0.9995)</li>
-<li>extreme_dry_heat: 0.9935 (95% CI: 0.9930..0.9939)</li>
+<li>dry_windy: 0.9875 (95% CI: 0.9867..0.9882)</li>
 </ol><h3>Conservative risk ranking (mean BAF upper 95% CI bound)</h3><ol>
 <li>high_conifer: upper_ci=0.9996 (mean=0.9995, 95% CI: 0.9994..0.9996)</li>
 <li>baseline: upper_ci=0.9995 (mean=0.9994, 95% CI: 0.9994..0.9995)</li>
-<li>extreme_dry_heat: upper_ci=0.9939 (mean=0.9935, 95% CI: 0.9930..0.9939)</li>
+<li>dry_windy: upper_ci=0.9882 (mean=0.9875, 95% CI: 0.9867..0.9882)</li>
 </ol><h3>Mean AUC (absolute)</h3><ol>
 <li>high_conifer: 30252.3500</li>
 <li>baseline: 30212.9000</li>
-<li>extreme_dry_heat: 30053.5500</li>
+<li>dry_windy: 29853.2600</li>
 </ol>
 <h2>Normalized KPI ranking</h2>
 <h3>Mean peak_fire_fraction (normalized)</h3><ol>
 <li>baseline: 0.0769</li>
 <li>high_conifer: 0.0733</li>
-<li>extreme_dry_heat: 0.0575</li>
+<li>dry_windy: 0.0534</li>
+</ol>
+<h2>Composite risk ranking</h2>
+<h3>Mean composite risk score (normalized, 95% bootstrap CI)</h3><ol>
+<li>extreme_dry_heat: 0.3403 (95% CI: 0.3256..0.3542)</li>
+<li>high_conifer: 0.3088 (95% CI: 0.2995..0.3193)</li>
+<li>baseline: 0.2996 (95% CI: 0.2924..0.3076)</li>
 </ol><h3>Mean auc_normalized (normalized)</h3><ol>
 <li>baseline: 0.0343</li>
 <li>high_conifer: 0.0321</li>
-<li>extreme_dry_heat: 0.0208</li>
-</ol><h2>Top parameter-metric correlations</h2><ul>
-<li>param_rain_intensity vs baf: -0.9787</li>
-<li>param_rain_enabled vs baf: -0.9512</li>
-<li>param_rain_intensity vs max_spread_rate: -0.9174</li>
-<li>param_temperature_c vs baf: 0.9083</li>
-<li>param_rain_intensity vs peak_fire_size: -0.9035</li>
+<li>dry_windy: 0.0190</li>
+</ol><h2>Top parameter-metric correlations (uncontrolled)</h2>
+<p>Note: these are global correlations without controlling for scenario.</p><ul>
+<li>param_rain_enabled vs baf: -0.9916</li>
+<li>param_rain_intensity vs baf: -0.9450</li>
+<li>param_rain_enabled vs max_spread_rate: -0.9309</li>
+<li>param_rain_enabled vs peak_fire_size: -0.8937</li>
+<li>param_rain_intensity vs max_spread_rate: -0.8936</li>
+</ul>
+<h2>Top parameter-metric correlations (controlled by scenario)</h2>
+<p>Method: within-scenario demeaning (scenario fixed-effects style).</p><ul>
 </ul>
 <h2>Scenario-local top parameter-metric correlations</h2>
 <h3>baseline</h3>
-<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/14).</p>
+<p>⚠️ Constant param_* in this scenario (14): param_conifer_ratio, param_f, param_flamm_conif, param_flamm_decid, param_height...</p>
 <h3>dry_windy</h3>
-<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/14).</p>
+<p>⚠️ Constant param_* in this scenario (14): param_conifer_ratio, param_f, param_flamm_conif, param_flamm_decid, param_height...</p>
 <h3>extreme_dry_heat</h3>
-<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/14).</p>
+<p>⚠️ Constant param_* in this scenario (14): param_conifer_ratio, param_f, param_flamm_conif, param_flamm_decid, param_height...</p>
 <h3>extreme_wet_cool</h3>
-<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/14).</p>
+<p>⚠️ Constant param_* in this scenario (14): param_conifer_ratio, param_f, param_flamm_conif, param_flamm_decid, param_height...</p>
 <h3>high_conifer</h3>
-<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/14).</p>
+<p>⚠️ Constant param_* in this scenario (14): param_conifer_ratio, param_f, param_flamm_conif, param_flamm_decid, param_height...</p>
 <h3>wet_cool</h3>
-<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/14).</p>
+<p>⚠️ Constant param_* in this scenario (14): param_conifer_ratio, param_f, param_flamm_conif, param_flamm_decid, param_height...</p>
 <h3>windy_rain_burst</h3>
-<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/14).</p>
+<p>⚠️ Constant param_* in this scenario (14): param_conifer_ratio, param_f, param_flamm_conif, param_flamm_decid, param_height...</p>
 <h2>Figures</h2>
 <figure><img src='figures/baf_hist.png' alt='baf_hist' width='760'><figcaption>Global BAF histogram across all scenarios; dashed lines mark per-scenario means.</figcaption></figure>
 <figure><img src='figures/scenario_baf_boxplot.png' alt='scenario_baf_boxplot' width='760'><figcaption>Per-scenario BAF boxplots (median, IQR, outliers).</figcaption></figure>

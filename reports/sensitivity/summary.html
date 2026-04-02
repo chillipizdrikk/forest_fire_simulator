@@ -1,0 +1,115 @@
+<html><head><meta charset='utf-8'><title>Forest fire experiments report</title></head><body>
+<h1>Forest fire experiments report</h1>
+<h2>Overall</h2>
+<ul>
+<li>Total runs: 1000</li>
+<li>Mean burned area fraction (all / uncensored): 0.3620 / 0.3604</li>
+<li>Mean auc_normalized (all / uncensored): 0.0054 / 0.0055</li>
+<li>Mean time_to_extinguish (all / uncensored): 176.8290 / 167.1771</li>
+<li>Critical share (all / uncensored): 0.2640 / 0.2667</li>
+<li>BAF quantiles p25/p50/p75/p95: 0.0015 / 0.2012 / 0.8325 / 0.9891</li>
+<li>Burned area p95/p99: 0.9891 / 0.9917</li>
+<li>Critical BAF threshold used: 0.8000</li>
+<li>Catastrophic probability (baf &gt;= 0.8000): 0.2640</li>
+<li>Scenario ranking metric: auc_normalized_mean</li>
+<li>Censored runs (truncated by max_steps): 29 (0.0290)</li>
+<li>Note: censored runs can bias metrics: fire_duration and AUC are typically underestimated, while BAF-related risk can be understated when fire is still active at truncation.</li>
+</ul>
+<h2>Worst scenarios by Mean auc_normalized (normalized)</h2><ol>
+<li>anchor_hot_dry: 0.0189</li>
+<li>transition_weaker_wind: 0.0096</li>
+<li>transition_low_humidity: 0.0089</li>
+</ol>
+<h2>Absolute KPI ranking</h2>
+<h3>Mean burned area fraction (absolute, point estimate)</h3><ol>
+<li>anchor_hot_dry: 0.9880</li>
+<li>transition_low_humidity: 0.7680</li>
+<li>transition_weaker_wind: 0.7388</li>
+</ol><h3>KPI comparison by scenario (all / uncensored)</h3><ul>
+<li>anchor_cool_wet: baf=0.0002/0.0002, auc_normalized=0.0001/0.0001, time_to_extinguish=96.8100/96.8100, critical=0.0000/0.0000, censored_share=0.0000, baf_q(p25/p50/p75/p95)=0.0001/0.0001/0.0002/0.0005</li>
+<li>anchor_hot_dry: baf=0.9880/0.9880, auc_normalized=0.0189/0.0189, time_to_extinguish=167.1200/167.1200, critical=1.0000/1.0000, censored_share=0.0000, baf_q(p25/p50/p75/p95)=0.9867/0.9891/0.9909/0.9922</li>
+<li>anchor_mid_windy_rain: baf=0.2080/0.2018, auc_normalized=0.0032/0.0033, time_to_extinguish=192.9600/173.3617, critical=0.0000/0.0000, censored_share=0.0600, baf_q(p25/p50/p75/p95)=0.0382/0.2002/0.3081/0.5616</li>
+<li>transition_cooler: baf=0.1431/0.1416, auc_normalized=0.0022/0.0022, time_to_extinguish=172.7500/166.0714, critical=0.0000/0.0000, censored_share=0.0200, baf_q(p25/p50/p75/p95)=0.0045/0.1580/0.2314/0.3425</li>
+<li>transition_high_humidity: baf=0.0189/0.0189, auc_normalized=0.0006/0.0006, time_to_extinguish=91.6900/91.6900, critical=0.0000/0.0000, censored_share=0.0000, baf_q(p25/p50/p75/p95)=0.0008/0.0046/0.0275/0.0872</li>
+<li>transition_low_humidity: baf=0.7680/0.7692, auc_normalized=0.0089/0.0092, time_to_extinguish=256.3300/240.7766, critical=0.7800/0.7872, censored_share=0.0600, baf_q(p25/p50/p75/p95)=0.8613/0.9108/0.9294/0.9391</li>
+<li>transition_mid_humidity: baf=0.2491/0.2449, auc_normalized=0.0035/0.0035, time_to_extinguish=207.9100/195.7396, critical=0.0000/0.0000, censored_share=0.0400, baf_q(p25/p50/p75/p95)=0.0100/0.2516/0.3819/0.6539</li>
+<li>transition_stronger_wind: baf=0.0889/0.0878, auc_normalized=0.0017/0.0018, time_to_extinguish=144.2900/133.2887, critical=0.0000/0.0000, censored_share=0.0300, baf_q(p25/p50/p75/p95)=0.0013/0.0793/0.1316/0.2714</li>
+<li>transition_warmer: baf=0.4166/0.4176, auc_normalized=0.0057/0.0058, time_to_extinguish=214.1800/205.3402, critical=0.1000/0.1031, censored_share=0.0300, baf_q(p25/p50/p75/p95)=0.2365/0.3958/0.6331/0.8325</li>
+<li>transition_weaker_wind: baf=0.7388/0.7531, auc_normalized=0.0096/0.0099, time_to_extinguish=224.2500/209.7368, critical=0.7600/0.7895, censored_share=0.0500, baf_q(p25/p50/p75/p95)=0.8091/0.8682/0.8939/0.9076</li>
+</ul>
+<h3>Mean burned area fraction (95% bootstrap CI)</h3><ol>
+<li>anchor_hot_dry: 0.9880 (95% CI: 0.9870..0.9888)</li>
+<li>transition_low_humidity: 0.7680 (95% CI: 0.7022..0.8265)</li>
+<li>transition_weaker_wind: 0.7388 (95% CI: 0.6751..0.7955)</li>
+</ol><h3>Conservative risk ranking (mean BAF upper 95% CI bound)</h3><ol>
+<li>anchor_hot_dry: upper_ci=0.9888 (mean=0.9880, 95% CI: 0.9870..0.9888)</li>
+<li>transition_low_humidity: upper_ci=0.8265 (mean=0.7680, 95% CI: 0.7022..0.8265)</li>
+<li>transition_weaker_wind: upper_ci=0.7955 (mean=0.7388, 95% CI: 0.6751..0.7955)</li>
+</ol><h3>Mean AUC (absolute)</h3><ol>
+<li>anchor_hot_dry: 29865.8300</li>
+<li>transition_low_humidity: 21339.3100</li>
+<li>transition_weaker_wind: 20496.1100</li>
+</ol>
+<h2>Normalized KPI ranking</h2>
+<h3>Mean peak_fire_fraction (normalized)</h3><ol>
+<li>anchor_hot_dry: 0.0553</li>
+<li>transition_low_humidity: 0.0273</li>
+<li>transition_weaker_wind: 0.0265</li>
+</ol>
+<h2>Composite risk ranking</h2>
+<h3>Mean composite risk score (normalized, 95% bootstrap CI)</h3><ol>
+<li>transition_low_humidity: 0.3285 (95% CI: 0.3046..0.3483)</li>
+<li>transition_weaker_wind: 0.3053 (95% CI: 0.2834..0.3248)</li>
+<li>anchor_hot_dry: 0.3033 (95% CI: 0.2956..0.3117)</li>
+</ol><h3>Mean auc_normalized (normalized)</h3><ol>
+<li>anchor_hot_dry: 0.0189</li>
+<li>transition_weaker_wind: 0.0096</li>
+<li>transition_low_humidity: 0.0089</li>
+</ol><h2>Top parameter-metric correlations (uncontrolled)</h2>
+<p>Note: these are global correlations without controlling for scenario.</p><ul>
+<li>param_rain_enabled vs peak_fire_size: -0.7526</li>
+<li>param_humidity vs peak_fire_size: -0.7403</li>
+<li>param_rain_intensity vs peak_fire_size: -0.7060</li>
+<li>param_humidity vs max_spread_rate: -0.6983</li>
+<li>param_humidity vs baf: -0.6790</li>
+</ul>
+<h2>Top parameter-metric correlations (controlled by scenario)</h2>
+<p>Method: within-scenario demeaning (scenario fixed-effects style).</p><ul>
+</ul>
+<h2>Scenario-local top parameter-metric correlations</h2>
+<h3>anchor_cool_wet</h3>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/12).</p>
+<p>⚠️ Constant param_* in this scenario (12): param_conifer_ratio, param_f, param_height, param_humidity, param_init_tree_density...</p>
+<h3>anchor_hot_dry</h3>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/12).</p>
+<p>⚠️ Constant param_* in this scenario (12): param_conifer_ratio, param_f, param_height, param_humidity, param_init_tree_density...</p>
+<h3>anchor_mid_windy_rain</h3>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/12).</p>
+<p>⚠️ Constant param_* in this scenario (12): param_conifer_ratio, param_f, param_height, param_humidity, param_init_tree_density...</p>
+<h3>transition_cooler</h3>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/12).</p>
+<p>⚠️ Constant param_* in this scenario (12): param_conifer_ratio, param_f, param_height, param_humidity, param_init_tree_density...</p>
+<h3>transition_high_humidity</h3>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/12).</p>
+<p>⚠️ Constant param_* in this scenario (12): param_conifer_ratio, param_f, param_height, param_humidity, param_init_tree_density...</p>
+<h3>transition_low_humidity</h3>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/12).</p>
+<p>⚠️ Constant param_* in this scenario (12): param_conifer_ratio, param_f, param_height, param_humidity, param_init_tree_density...</p>
+<h3>transition_mid_humidity</h3>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/12).</p>
+<p>⚠️ Constant param_* in this scenario (12): param_conifer_ratio, param_f, param_height, param_humidity, param_init_tree_density...</p>
+<h3>transition_stronger_wind</h3>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/12).</p>
+<p>⚠️ Constant param_* in this scenario (12): param_conifer_ratio, param_f, param_height, param_humidity, param_init_tree_density...</p>
+<h3>transition_warmer</h3>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/12).</p>
+<p>⚠️ Constant param_* in this scenario (12): param_conifer_ratio, param_f, param_height, param_humidity, param_init_tree_density...</p>
+<h3>transition_weaker_wind</h3>
+<p>Not enough information for per-scenario correlation estimation (runs: 100, minimum: 5, varying params: 0/12).</p>
+<p>⚠️ Constant param_* in this scenario (12): param_conifer_ratio, param_f, param_height, param_humidity, param_init_tree_density...</p>
+<h2>Figures</h2>
+<figure><img src='figures/baf_hist.png' alt='baf_hist' width='760'><figcaption>Global BAF histogram across all scenarios; dashed lines mark per-scenario means.</figcaption></figure>
+<figure><img src='figures/scenario_baf_boxplot.png' alt='scenario_baf_boxplot' width='760'><figcaption>Per-scenario BAF boxplots (median, IQR, outliers).</figcaption></figure>
+<figure><img src='figures/scenario_baf_hist_grid.png' alt='scenario_baf_hist_grid' width='760'><figcaption>Small-multiple histograms with fixed BAF bins and per-panel y-scale: each panel shows one scenario distribution.</figcaption></figure>
+<figure><img src='figures/scenario_baf_mean_iqr.png' alt='scenario_baf_mean_iqr' width='760'><figcaption>Scenario mean BAF with interquartile range as asymmetric error bars.</figcaption></figure>
+</body></html>
