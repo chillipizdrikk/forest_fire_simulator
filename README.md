@@ -53,6 +53,9 @@ done
 
 - Для аналізу чутливості (перехідна зона + якорі) використовуйте `scenarios_sensitivity.yaml`:
 
+> Увага: приклад нижче з `\` — для bash/zsh.  
+> У PowerShell використовуйте один рядок або переноси через бектик `` ` ``.
+
 ```bash
 python run_experiments.py \
   --scenarios scenarios_sensitivity.yaml \
@@ -60,6 +63,12 @@ python run_experiments.py \
   --seed 42 \
   --results-dir results/raw/sensitivity \
   --reports-dir reports/sensitivity
+```
+
+PowerShell (одним рядком):
+
+```powershell
+python run_experiments.py --scenarios scenarios_sensitivity.yaml --n 100 --seed 42 --results-dir results/raw/sensitivity --reports-dir reports/sensitivity
 ```
 
 Outputs:
