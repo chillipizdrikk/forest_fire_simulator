@@ -51,6 +51,26 @@ for s in 42 43 44 45 46; do
 done
 ```
 
+- Для аналізу чутливості (перехідна зона + якорі) використовуйте `scenarios_sensitivity.yaml`:
+
+> Увага: приклад нижче з `\` — для bash/zsh.  
+> У PowerShell використовуйте один рядок або переноси через бектик `` ` ``.
+
+```bash
+python run_experiments.py \
+  --scenarios scenarios_sensitivity.yaml \
+  --n 100 \
+  --seed 42 \
+  --results-dir results/raw/sensitivity \
+  --reports-dir reports/sensitivity
+```
+
+PowerShell (одним рядком):
+
+```powershell
+python run_experiments.py --scenarios scenarios_sensitivity.yaml --n 100 --seed 42 --results-dir results/raw/sensitivity --reports-dir reports/sensitivity
+```
+
 Outputs:
 
 - Raw results: `results/raw/experiment_results_<timestamp>.csv`
