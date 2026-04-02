@@ -50,6 +50,21 @@ def _bootstrap_mean_ci(
     return ci_low, ci_high
 
 
+def _clamp_01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _normalize_01(values: list[float]) -> list[float]:
+    if not values:
+        return []
+    lo = min(values)
+    hi = max(values)
+    if hi == lo:
+        return [0.0 for _ in values]
+    span = hi - lo
+    return [_clamp_01((value - lo) / span) for value in values]
+
+
 def analyze_results(
     rows: list[dict[str, Any]],
     *,
@@ -86,7 +101,23 @@ def analyze_results(
         local_auc = [float(item.get("auc", 0.0)) for item in items]
         local_peak_norm = [float(item.get("peak_fire_fraction", 0.0)) for item in items]
         local_auc_norm = [float(item.get("auc_normalized", 0.0)) for item in items]
+        local_tte = [float(item.get("time_to_extinguish", 0.0)) for item in items]
+        local_tte_norm = _normalize_01(local_tte)
+        run_risk_scores = [
+            float(
+                mean(
+                    [
+                        _clamp_01(baf),
+                        _clamp_01(auc_norm),
+                        _clamp_01(peak_norm),
+                        _clamp_01(tte_norm),
+                    ]
+                )
+            )
+            for baf, auc_norm, peak_norm, tte_norm in zip(local_baf, local_auc_norm, local_peak_norm, local_tte_norm)
+        ]
         baf_mean_ci_low, baf_mean_ci_high = _bootstrap_mean_ci(local_baf, confidence=0.95)
+        risk_mean_ci_low, risk_mean_ci_high = _bootstrap_mean_ci(run_risk_scores, confidence=0.95)
         scenario_stats[scenario_name] = {
             "runs": len(items),
             "baf_mean": float(mean(local_baf)) if local_baf else 0.0,
@@ -100,6 +131,9 @@ def analyze_results(
             "critical_count": int(sum(bool(item.get("critical", False)) for item in items)),
             "max_spread_rate_mean": float(mean(float(item.get("max_spread_rate", 0.0)) for item in items)),
             "time_to_extinguish_mean": float(mean(float(item.get("time_to_extinguish", 0.0)) for item in items)),
+            "risk_score_mean": float(mean(run_risk_scores)) if run_risk_scores else 0.0,
+            "risk_score_mean_ci_low": risk_mean_ci_low,
+            "risk_score_mean_ci_high": risk_mean_ci_high,
         }
 
     ranking = sorted(
@@ -283,6 +317,7 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         "peak_fire_fraction_mean": "Mean peak_fire_fraction (normalized)",
         "auc_mean": "Mean AUC (absolute)",
         "baf_mean": "Mean burned area fraction (absolute, point estimate)",
+        "risk_score_mean": "Mean composite risk score (normalized)",
     }
     ranking_metric_label = ranking_metric_labels.get(ranking_metric, f"Mean {ranking_metric}")
     top_worst_abs_baf = sorted(
@@ -323,6 +358,19 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     )[:3]
     top_worst_norm_peak = sorted(
         ((name, float(stats.get("peak_fire_fraction_mean", 0.0))) for name, stats in summary.by_scenario.items()),
+        key=lambda item: item[1],
+        reverse=True,
+    )[:3]
+    top_worst_composite_risk = sorted(
+        (
+            (
+                name,
+                float(stats.get("risk_score_mean", 0.0)),
+                float(stats.get("risk_score_mean_ci_low", 0.0)),
+                float(stats.get("risk_score_mean_ci_high", 0.0)),
+            )
+            for name, stats in summary.by_scenario.items()
+        ),
         key=lambda item: item[1],
         reverse=True,
     )[:3]
@@ -379,6 +427,11 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     md_lines.append("### Mean peak_fire_fraction (normalized)")
     for name, score in top_worst_norm_peak:
         md_lines.append(f"- {name}: {score:.4f}")
+    md_lines.append("")
+    md_lines.append("## Composite risk ranking")
+    md_lines.append("### Mean composite risk score (normalized, 95% bootstrap CI)")
+    for name, score, ci_low, ci_high in top_worst_composite_risk:
+        md_lines.append(f"- {name}: {score:.4f} (95% CI: {ci_low:.4f}..{ci_high:.4f})")
     md_lines.append(f"### {ranking_metric_label}")
     for name, score in top_worst:
         md_lines.append(f"- {name}: {score:.4f}")
@@ -467,6 +520,11 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     html_lines.append("<h3>Mean peak_fire_fraction (normalized)</h3><ol>")
     for name, score in top_worst_norm_peak:
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
+    html_lines.append("</ol>")
+    html_lines.append("<h2>Composite risk ranking</h2>")
+    html_lines.append("<h3>Mean composite risk score (normalized, 95% bootstrap CI)</h3><ol>")
+    for name, score, ci_low, ci_high in top_worst_composite_risk:
+        html_lines.append(f"<li>{name}: {score:.4f} (95% CI: {ci_low:.4f}..{ci_high:.4f})</li>")
     html_lines.append(f"</ol><h3>{ranking_metric_label}</h3><ol>")
     for name, score in top_worst:
         html_lines.append(f"<li>{name}: {score:.4f}</li>")

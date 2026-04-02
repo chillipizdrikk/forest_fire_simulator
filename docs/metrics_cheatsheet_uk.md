@@ -16,11 +16,30 @@
 | `peak_fire_fraction` | `peak_fire_size / initial_tree_cells` | `0..1` | гірше | Нормалізований пік для порівнянь |
 | `auc_normalized` | `auc / (initial_tree_cells * time_horizon)` | `0..1` | гірше | Порівняння прогонів різного масштабу |
 | `critical` | `baf >= critical_baf_threshold` | bool | гірше | Швидкий бінарний індикатор ризику |
+| `risk_score_mean` | Середній композитний ризик по сценарію: середнє з `baf`, `auc_normalized`, `peak_fire_fraction`, `time_to_extinguish_norm` | `0..1` | гірше | Узагальнений рейтинг ризику між сценаріями |
 
 ### Важливо: `auc` vs `auc_normalized`
 
 - `auc` — абсолютна величина (залежить від розміру лісу і тривалості).
 - `auc_normalized` — частка від умовного максимуму (зручно порівнювати різні розміри/горизонти часу).
+
+### Композитний ризик: `risk_score_mean`
+
+- Для кожного прогону в межах сценарію обчислюється:
+  - `time_to_extinguish_norm = (time_to_extinguish - min_scenario_tte) / (max_scenario_tte - min_scenario_tte)`  
+    (якщо `max == min`, береться `0`).
+  - `risk_score_run = mean([baf, auc_normalized, peak_fire_fraction, time_to_extinguish_norm])`.
+- `risk_score_mean` — це середнє `risk_score_run` по всіх прогонах сценарію.
+- Усі компоненти лежать у `0..1`, тому і композитний скор також у `0..1`.
+
+**Інтерпретація:**
+- Ближче до `0` — сценарій відносно безпечніший (менше вигоряння/інтенсивність/тривалість).
+- Ближче до `1` — сценарій системно ризиковіший одразу за кількома осями.
+
+**Приклад читання:**
+- Сценарій A: `risk_score_mean = 0.72 (95% CI 0.68..0.76)`  
+- Сценарій B: `risk_score_mean = 0.44 (95% CI 0.40..0.48)`  
+  ⇒ A суттєво ризиковіший за композитним критерієм.
 
 ---
 
