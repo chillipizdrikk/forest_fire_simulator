@@ -3,52 +3,52 @@
 <h2>Overall</h2>
 <ul>
 <li>Total runs: 700</li>
-<li>Mean burned area fraction: 0.5572</li>
+<li>Mean burned area fraction: 0.6222</li>
 <li>Burned area p95/p99: 0.9998 / 0.9999</li>
 <li>Critical BAF threshold used: 0.8000</li>
-<li>Catastrophic probability (baf &gt;= 0.8000): 0.5557</li>
+<li>Catastrophic probability (baf &gt;= 0.8000): 0.5729</li>
 <li>Scenario ranking metric: auc_normalized_mean</li>
-<li>Censored runs (truncated by max_steps): 9 (0.0129)</li>
+<li>Censored runs (truncated by max_steps): 3 (0.0043)</li>
 <li>Note: censored runs can bias metrics: fire_duration and AUC are typically underestimated, while BAF-related risk can be understated when fire is still active at truncation.</li>
 </ul>
 <h2>Worst scenarios by Mean auc_normalized (normalized)</h2><ol>
 <li>baseline: 0.0343</li>
 <li>high_conifer: 0.0321</li>
-<li>dry_windy: 0.0190</li>
+<li>extreme_dry_heat: 0.0208</li>
 </ol>
 <h2>Absolute KPI ranking</h2>
 <h3>Mean burned area fraction (absolute, point estimate)</h3><ol>
 <li>high_conifer: 0.9995</li>
 <li>baseline: 0.9994</li>
-<li>dry_windy: 0.9875</li>
+<li>extreme_dry_heat: 0.9935</li>
 </ol><h3>Mean burned area fraction (95% bootstrap CI)</h3><ol>
 <li>high_conifer: 0.9995 (95% CI: 0.9994..0.9996)</li>
 <li>baseline: 0.9994 (95% CI: 0.9994..0.9995)</li>
-<li>dry_windy: 0.9875 (95% CI: 0.9867..0.9882)</li>
+<li>extreme_dry_heat: 0.9935 (95% CI: 0.9930..0.9939)</li>
 </ol><h3>Conservative risk ranking (mean BAF upper 95% CI bound)</h3><ol>
 <li>high_conifer: upper_ci=0.9996 (mean=0.9995, 95% CI: 0.9994..0.9996)</li>
 <li>baseline: upper_ci=0.9995 (mean=0.9994, 95% CI: 0.9994..0.9995)</li>
-<li>dry_windy: upper_ci=0.9882 (mean=0.9875, 95% CI: 0.9867..0.9882)</li>
+<li>extreme_dry_heat: upper_ci=0.9939 (mean=0.9935, 95% CI: 0.9930..0.9939)</li>
 </ol><h3>Mean AUC (absolute)</h3><ol>
 <li>high_conifer: 30252.3500</li>
 <li>baseline: 30212.9000</li>
-<li>dry_windy: 29853.2600</li>
+<li>extreme_dry_heat: 30053.5500</li>
 </ol>
 <h2>Normalized KPI ranking</h2>
 <h3>Mean peak_fire_fraction (normalized)</h3><ol>
 <li>baseline: 0.0769</li>
 <li>high_conifer: 0.0733</li>
-<li>dry_windy: 0.0534</li>
+<li>extreme_dry_heat: 0.0575</li>
 </ol><h3>Mean auc_normalized (normalized)</h3><ol>
 <li>baseline: 0.0343</li>
 <li>high_conifer: 0.0321</li>
-<li>dry_windy: 0.0190</li>
+<li>extreme_dry_heat: 0.0208</li>
 </ol><h2>Top parameter-metric correlations</h2><ul>
-<li>param_rain_enabled vs baf: -0.9916</li>
-<li>param_rain_intensity vs baf: -0.9450</li>
-<li>param_rain_enabled vs max_spread_rate: -0.9309</li>
-<li>param_rain_enabled vs peak_fire_size: -0.8937</li>
-<li>param_rain_intensity vs max_spread_rate: -0.8936</li>
+<li>param_rain_intensity vs baf: -0.9787</li>
+<li>param_rain_enabled vs baf: -0.9512</li>
+<li>param_rain_intensity vs max_spread_rate: -0.9174</li>
+<li>param_temperature_c vs baf: 0.9083</li>
+<li>param_rain_intensity vs peak_fire_size: -0.9035</li>
 </ul>
 <h2>Scenario-local top parameter-metric correlations</h2>
 <h3>baseline</h3>
@@ -66,6 +66,8 @@
 <h3>windy_rain_burst</h3>
 <p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>
 <h2>Figures</h2>
-<figure><img src='figures/baf_hist.png' alt='baf_hist' width='600'></figure>
-<figure><img src='figures/scenario_baf_boxplot.png' alt='scenario_baf_boxplot' width='600'></figure>
+<figure><img src='figures/baf_hist.png' alt='baf_hist' width='760'><figcaption>Global BAF histogram across all scenarios; dashed lines mark per-scenario means.</figcaption></figure>
+<figure><img src='figures/scenario_baf_boxplot.png' alt='scenario_baf_boxplot' width='760'><figcaption>Per-scenario BAF boxplots (median, IQR, outliers).</figcaption></figure>
+<figure><img src='figures/scenario_baf_hist_grid.png' alt='scenario_baf_hist_grid' width='760'><figcaption>Small-multiple histograms with fixed BAF bins and per-panel y-scale: each panel shows one scenario distribution.</figcaption></figure>
+<figure><img src='figures/scenario_baf_mean_iqr.png' alt='scenario_baf_mean_iqr' width='760'><figcaption>Scenario mean BAF with interquartile range as asymmetric error bars.</figcaption></figure>
 </body></html>
