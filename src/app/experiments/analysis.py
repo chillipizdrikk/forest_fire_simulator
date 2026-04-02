@@ -110,6 +110,9 @@ def analyze_results(
         "critical_mean_all": _critical_share(rows),
         "critical_mean_uncensored": _critical_share(uncensored_all),
         "baf_p95": _percentile(baf_values, 0.95),
+        "baf_p75": _percentile(baf_values, 0.75),
+        "baf_p50": _percentile(baf_values, 0.50),
+        "baf_p25": _percentile(baf_values, 0.25),
         "baf_p99": _percentile(baf_values, 0.99),
         "catastrophic_probability": (
             float(sum(v >= critical_baf_threshold for v in baf_values) / len(baf_values)) if baf_values else 0.0
@@ -153,6 +156,9 @@ def analyze_results(
             "baf_mean_ci_low": baf_mean_ci_low,
             "baf_mean_ci_high": baf_mean_ci_high,
             "baf_p95": _percentile(local_baf, 0.95),
+            "baf_p75": _percentile(local_baf, 0.75),
+            "baf_p50": _percentile(local_baf, 0.50),
+            "baf_p25": _percentile(local_baf, 0.25),
             "peak_fire_size_mean": float(mean(local_peak)) if local_peak else 0.0,
             "auc_mean": float(mean(local_auc)) if local_auc else 0.0,
             "peak_fire_fraction_mean": float(mean(local_peak_norm)) if local_peak_norm else 0.0,
@@ -514,6 +520,11 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
             "- Critical share (all / uncensored): "
             f"{summary.overall['critical_mean_all']:.4f} / {summary.overall['critical_mean_uncensored']:.4f}"
         ),
+        (
+            "- BAF quantiles p25/p50/p75/p95: "
+            f"{summary.overall['baf_p25']:.4f} / {summary.overall['baf_p50']:.4f} / "
+            f"{summary.overall['baf_p75']:.4f} / {summary.overall['baf_p95']:.4f}"
+        ),
         f"- Burned area p95/p99: {summary.overall['baf_p95']:.4f} / {summary.overall['baf_p99']:.4f}",
         f"- Critical BAF threshold used: {summary.overall['critical_baf_threshold']:.4f}",
         (
@@ -549,7 +560,8 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
             f"auc_normalized={stats['auc_normalized_mean_all']:.4f}/{stats['auc_normalized_mean_uncensored']:.4f}, "
             f"time_to_extinguish={stats['time_to_extinguish_mean_all']:.4f}/{stats['time_to_extinguish_mean_uncensored']:.4f}, "
             f"critical={stats['critical_mean_all']:.4f}/{stats['critical_mean_uncensored']:.4f}, "
-            f"censored_share={stats['censored_share']:.4f}"
+            f"censored_share={stats['censored_share']:.4f}, "
+            f"baf_q(p25/p50/p75/p95)={stats['baf_p25']:.4f}/{stats['baf_p50']:.4f}/{stats['baf_p75']:.4f}/{stats['baf_p95']:.4f}"
         )
     md_lines.append("### Mean burned area fraction (95% bootstrap CI)")
     for name, baf_mean, ci_low, ci_high in top_worst_abs_baf_with_ci:
@@ -663,6 +675,11 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
             "<li>Critical share (all / uncensored): "
             f"{summary.overall['critical_mean_all']:.4f} / {summary.overall['critical_mean_uncensored']:.4f}</li>"
         ),
+        (
+            "<li>BAF quantiles p25/p50/p75/p95: "
+            f"{summary.overall['baf_p25']:.4f} / {summary.overall['baf_p50']:.4f} / "
+            f"{summary.overall['baf_p75']:.4f} / {summary.overall['baf_p95']:.4f}</li>"
+        ),
         f"<li>Burned area p95/p99: {summary.overall['baf_p95']:.4f} / {summary.overall['baf_p99']:.4f}</li>",
         f"<li>Critical BAF threshold used: {summary.overall['critical_baf_threshold']:.4f}</li>",
         (
@@ -697,7 +714,8 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
             f"auc_normalized={stats['auc_normalized_mean_all']:.4f}/{stats['auc_normalized_mean_uncensored']:.4f}, "
             f"time_to_extinguish={stats['time_to_extinguish_mean_all']:.4f}/{stats['time_to_extinguish_mean_uncensored']:.4f}, "
             f"critical={stats['critical_mean_all']:.4f}/{stats['critical_mean_uncensored']:.4f}, "
-            f"censored_share={stats['censored_share']:.4f}</li>"
+            f"censored_share={stats['censored_share']:.4f}, "
+            f"baf_q(p25/p50/p75/p95)={stats['baf_p25']:.4f}/{stats['baf_p50']:.4f}/{stats['baf_p75']:.4f}/{stats['baf_p95']:.4f}</li>"
         )
     html_lines.append("</ul>")
     html_lines.append("<h3>Mean burned area fraction (95% bootstrap CI)</h3><ol>")
