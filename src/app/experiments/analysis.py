@@ -13,7 +13,9 @@ class AnalysisSummary:
     by_scenario: dict[str, dict[str, Any]]
     scenario_ranking: list[tuple[str, float]]
     correlations: list[tuple[str, str, float]]
+    controlled_correlations: list[tuple[str, str, float]]
     correlations_by_scenario: dict[str, list[tuple[str, str, float]]]
+    correlations_by_scenario_diagnostics: dict[str, dict[str, Any]]
 
 
 def _percentile(values: list[float], q: float) -> float:
@@ -145,8 +147,25 @@ def analyze_results(
     numeric_param_keys = sorted({key for row in rows for key in row if key.startswith("param_") and isinstance(row[key], (int, float))})
     metric_keys = ["baf", "peak_fire_size", "fire_duration", "max_spread_rate", "time_to_extinguish"]
     correlations = _collect_top_correlations(rows, numeric_param_keys, metric_keys, top_n=correlation_top_n)
+    controlled_correlations = _collect_controlled_top_correlations(
+        rows,
+        by_scenario,
+        numeric_param_keys,
+        metric_keys,
+        top_n=correlation_top_n,
+    )
     correlations_by_scenario: dict[str, list[tuple[str, str, float]]] = {}
+    correlations_by_scenario_diagnostics: dict[str, dict[str, Any]] = {}
     for scenario_name, scenario_rows in by_scenario.items():
+        non_constant_params = _count_non_constant_params(scenario_rows, numeric_param_keys)
+        constant_params = [pkey for pkey in numeric_param_keys if pkey not in non_constant_params]
+        correlations_by_scenario_diagnostics[scenario_name] = {
+            "runs": len(scenario_rows),
+            "min_runs_required": scenario_correlation_min_runs,
+            "non_constant_param_count": len(non_constant_params),
+            "total_param_count": len(numeric_param_keys),
+            "constant_param_keys": constant_params,
+        }
         if len(scenario_rows) < scenario_correlation_min_runs:
             continue
         correlations_by_scenario[scenario_name] = _collect_top_correlations(
@@ -161,7 +180,9 @@ def analyze_results(
         by_scenario=scenario_stats,
         scenario_ranking=ranking,
         correlations=correlations,
+        controlled_correlations=controlled_correlations,
         correlations_by_scenario=correlations_by_scenario,
+        correlations_by_scenario_diagnostics=correlations_by_scenario_diagnostics,
     )
 
 
@@ -187,6 +208,63 @@ def _collect_top_correlations(
                 continue
             cov = sum((x - p_mean) * (y - m_mean) for x, y in zip(px, my)) / len(px)
             correlations.append((pkey, mkey, float(cov / (p_std * m_std))))
+    correlations.sort(key=lambda item: abs(item[2]), reverse=True)
+    return correlations[:top_n]
+
+
+def _count_non_constant_params(rows: list[dict[str, Any]], numeric_param_keys: list[str]) -> list[str]:
+    non_constant: list[str] = []
+    for pkey in numeric_param_keys:
+        values = [float(row.get(pkey, 0.0)) for row in rows]
+        if not values:
+            continue
+        vmin = min(values)
+        vmax = max(values)
+        if vmax > vmin:
+            non_constant.append(pkey)
+    return non_constant
+
+
+def _collect_controlled_top_correlations(
+    rows: list[dict[str, Any]],
+    by_scenario: dict[str, list[dict[str, Any]]],
+    numeric_param_keys: list[str],
+    metric_keys: list[str],
+    *,
+    top_n: int,
+) -> list[tuple[str, str, float]]:
+    scenario_means: dict[str, dict[str, float]] = {}
+    keys_for_demean = numeric_param_keys + metric_keys
+    for scenario_name, scenario_rows in by_scenario.items():
+        scenario_means[scenario_name] = {}
+        for key in keys_for_demean:
+            values = [float(row.get(key, 0.0)) for row in scenario_rows]
+            scenario_means[scenario_name][key] = float(mean(values)) if values else 0.0
+
+    correlations: list[tuple[str, str, float]] = []
+    for pkey in numeric_param_keys:
+        px = [
+            float(row.get(pkey, 0.0)) - scenario_means[str(row["scenario"])][pkey]
+            for row in rows
+            if str(row["scenario"]) in scenario_means
+        ]
+        p_mean = mean(px) if px else 0.0
+        p_std = (sum((x - p_mean) ** 2 for x in px) / len(px)) ** 0.5 if px else 0.0
+        if p_std == 0:
+            continue
+        for mkey in metric_keys:
+            my = [
+                float(row.get(mkey, 0.0)) - scenario_means[str(row["scenario"])][mkey]
+                for row in rows
+                if str(row["scenario"]) in scenario_means
+            ]
+            m_mean = mean(my) if my else 0.0
+            m_std = (sum((y - m_mean) ** 2 for y in my) / len(my)) ** 0.5 if my else 0.0
+            if m_std == 0:
+                continue
+            cov = sum((x - p_mean) * (y - m_mean) for x, y in zip(px, my)) / len(px)
+            correlations.append((pkey, mkey, float(cov / (p_std * m_std))))
+
     correlations.sort(key=lambda item: abs(item[2]), reverse=True)
     return correlations[:top_n]
 
@@ -374,7 +452,8 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         key=lambda item: item[1],
         reverse=True,
     )[:3]
-    top_corr = summary.correlations[:5]
+    top_corr_uncontrolled = summary.correlations[:5]
+    top_corr_controlled = summary.controlled_correlations[:5]
     sorted_scenario_names = sorted(summary.by_scenario.keys())
 
     md_path = output_dir / "summary.md"
@@ -437,19 +516,48 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         md_lines.append(f"- {name}: {score:.4f}")
 
     md_lines.append("")
-    md_lines.append("## Top parameter-metric correlations")
-    for pkey, mkey, corr in top_corr:
+    md_lines.append("## Top parameter-metric correlations (uncontrolled)")
+    md_lines.append("- Note: these are global correlations without controlling for scenario.")
+    for pkey, mkey, corr in top_corr_uncontrolled:
+        md_lines.append(f"- {pkey} vs {mkey}: {corr:.4f}")
+    md_lines.append("")
+    md_lines.append("## Top parameter-metric correlations (controlled by scenario)")
+    md_lines.append("- Method: within-scenario demeaning (scenario fixed-effects style).")
+    for pkey, mkey, corr in top_corr_controlled:
         md_lines.append(f"- {pkey} vs {mkey}: {corr:.4f}")
     md_lines.append("")
     md_lines.append("## Scenario-local top parameter-metric correlations")
     for scenario_name in sorted_scenario_names:
         scenario_corr = summary.correlations_by_scenario.get(scenario_name)
+        diag = summary.correlations_by_scenario_diagnostics.get(scenario_name, {})
+        runs = int(diag.get("runs", 0))
+        non_constant_param_count = int(diag.get("non_constant_param_count", 0))
+        total_param_count = int(diag.get("total_param_count", 0))
+        min_runs = int(diag.get("min_runs_required", 5))
+        constant_param_keys = list(diag.get("constant_param_keys", []))
         md_lines.append(f"### {scenario_name}")
         if scenario_corr:
+            if non_constant_param_count == 0:
+                md_lines.append(
+                    f"- ⚠️ Correlation is weakly identified: all param_* are constant "
+                    f"({runs} runs, varying params: 0/{total_param_count})."
+                )
             for pkey, mkey, corr in scenario_corr[:5]:
                 md_lines.append(f"- {pkey} vs {mkey}: {corr:.4f}")
         else:
-            md_lines.append("- Not enough runs for per-scenario correlation estimation (minimum 5 runs).")
+            md_lines.append(
+                (
+                    "- Not enough information for per-scenario correlation estimation "
+                    f"(runs: {runs}, minimum: {min_runs}, varying params: "
+                    f"{non_constant_param_count}/{total_param_count})."
+                )
+            )
+        if constant_param_keys:
+            shown_keys = ", ".join(constant_param_keys[:5])
+            suffix = "..." if len(constant_param_keys) > 5 else ""
+            md_lines.append(
+                f"- ⚠️ Constant param_* in this scenario ({len(constant_param_keys)}): {shown_keys}{suffix}"
+            )
 
     if figures:
         md_lines.append("")
@@ -528,21 +636,51 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     html_lines.append(f"</ol><h3>{ranking_metric_label}</h3><ol>")
     for name, score in top_worst:
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
-    html_lines.append("</ol><h2>Top parameter-metric correlations</h2><ul>")
-    for pkey, mkey, corr in top_corr:
+    html_lines.append("</ol><h2>Top parameter-metric correlations (uncontrolled)</h2>")
+    html_lines.append("<p>Note: these are global correlations without controlling for scenario.</p><ul>")
+    for pkey, mkey, corr in top_corr_uncontrolled:
+        html_lines.append(f"<li>{pkey} vs {mkey}: {corr:.4f}</li>")
+    html_lines.append("</ul>")
+    html_lines.append("<h2>Top parameter-metric correlations (controlled by scenario)</h2>")
+    html_lines.append("<p>Method: within-scenario demeaning (scenario fixed-effects style).</p><ul>")
+    for pkey, mkey, corr in top_corr_controlled:
         html_lines.append(f"<li>{pkey} vs {mkey}: {corr:.4f}</li>")
     html_lines.append("</ul>")
     html_lines.append("<h2>Scenario-local top parameter-metric correlations</h2>")
     for scenario_name in sorted_scenario_names:
         scenario_corr = summary.correlations_by_scenario.get(scenario_name)
+        diag = summary.correlations_by_scenario_diagnostics.get(scenario_name, {})
+        runs = int(diag.get("runs", 0))
+        non_constant_param_count = int(diag.get("non_constant_param_count", 0))
+        total_param_count = int(diag.get("total_param_count", 0))
+        min_runs = int(diag.get("min_runs_required", 5))
+        constant_param_keys = list(diag.get("constant_param_keys", []))
         html_lines.append(f"<h3>{scenario_name}</h3>")
         if scenario_corr:
+            if non_constant_param_count == 0:
+                html_lines.append(
+                    "<p>⚠️ Correlation is weakly identified: all param_* are constant "
+                    f"({runs} runs, varying params: 0/{total_param_count}).</p>"
+                )
             html_lines.append("<ul>")
             for pkey, mkey, corr in scenario_corr[:5]:
                 html_lines.append(f"<li>{pkey} vs {mkey}: {corr:.4f}</li>")
             html_lines.append("</ul>")
         else:
-            html_lines.append("<p>Not enough runs for per-scenario correlation estimation (minimum 5 runs).</p>")
+            html_lines.append(
+                (
+                    "<p>Not enough information for per-scenario correlation estimation "
+                    f"(runs: {runs}, minimum: {min_runs}, varying params: "
+                    f"{non_constant_param_count}/{total_param_count}).</p>"
+                )
+            )
+        if constant_param_keys:
+            shown_keys = ", ".join(constant_param_keys[:5])
+            suffix = "..." if len(constant_param_keys) > 5 else ""
+            html_lines.append(
+                "<p>⚠️ Constant param_* in this scenario "
+                f"({len(constant_param_keys)}): {shown_keys}{suffix}</p>"
+            )
 
     if figures:
         html_lines.append("<h2>Figures</h2>")
