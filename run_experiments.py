@@ -23,6 +23,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    scenarios_path = Path(args.scenarios)
+    if "sensitivity" in scenarios_path.stem and args.n < 100:
+        print(f"[info] Sensitivity run requires at least 100 runs per scenario; overriding --n from {args.n} to 100.")
+        args.n = 100
+
     defaults, scenarios = load_scenarios(args.scenarios)
     results = run_experiments(
         defaults=defaults,
