@@ -23,8 +23,18 @@ def _percentile(values: list[float], q: float) -> float:
     if not values:
         return 0.0
     ordered = sorted(values)
-    idx = int((len(ordered) - 1) * q)
-    return float(ordered[idx])
+    if len(ordered) == 1:
+        return float(ordered[0])
+    q_clamped = _clamp_01(float(q))
+    pos = (len(ordered) - 1) * q_clamped
+    lower_idx = int(pos)
+    upper_idx = min(lower_idx + 1, len(ordered) - 1)
+    if lower_idx == upper_idx:
+        return float(ordered[lower_idx])
+    fraction = pos - lower_idx
+    lower = ordered[lower_idx]
+    upper = ordered[upper_idx]
+    return float(lower + fraction * (upper - lower))
 
 
 def _bootstrap_mean_ci(
