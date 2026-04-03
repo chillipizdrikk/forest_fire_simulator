@@ -16,7 +16,8 @@
 | `peak_fire_fraction` | `peak_fire_size / initial_tree_cells` | `0..1` | гірше | Нормалізований пік для порівнянь |
 | `auc_normalized` | `auc / (initial_tree_cells * time_horizon)` | `0..1` | гірше | Порівняння прогонів різного масштабу |
 | `critical` | `baf >= critical_baf_threshold` | bool | гірше | Швидкий бінарний індикатор ризику |
-| `risk_score_mean` | Середній композитний ризик по сценарію: середнє з `baf`, `auc_normalized`, `peak_fire_fraction`, `time_to_extinguish_norm` | `0..1` | гірше | Узагальнений рейтинг ризику між сценаріями |
+| `risk_score_mean` | Середній композитний ризик по сценарію: середнє з `baf`, `auc_normalized`, `peak_fire_fraction`, `time_to_extinguish_global_norm` | `0..1` | гірше | Узагальнений рейтинг ризику між сценаріями |
+| `risk_score_mean_uncensored` | Те саме, але лише для прогонів без `truncated_by_max_steps=True` | `0..1` | гірше | Стабільніше порівняння, якщо є багато цензурованих прогонів |
 
 ### Важливо: `auc` vs `auc_normalized`
 
@@ -31,11 +32,13 @@
 ### Композитний ризик: `risk_score_mean`
 
 - Для кожного прогону в межах сценарію обчислюється:
-  - `time_to_extinguish_norm = (time_to_extinguish - min_scenario_tte) / (max_scenario_tte - min_scenario_tte)`  
-    (якщо `max == min`, береться `0`).
-  - `risk_score_run = mean([baf, auc_normalized, peak_fire_fraction, time_to_extinguish_norm])`.
+  - `time_to_extinguish_global_norm = (time_to_extinguish - global_tte_min) / (global_tte_max - global_tte_min)`.
+  - `global_tte_min/global_tte_max` рахуються глобально по всіх сценаріях (у поточній реалізації — за uncensored-прогонами; якщо uncensored немає, fallback на всі прогони).
+  - `risk_score_run = mean([baf, auc_normalized, peak_fire_fraction, time_to_extinguish_global_norm])`.
 - `risk_score_mean` — це середнє `risk_score_run` по всіх прогонах сценарію.
+- `risk_score_mean_uncensored` — середнє `risk_score_run` лише для uncensored-прогонів.
 - Усі компоненти лежать у `0..1`, тому і композитний скор також у `0..1`.
+- Через глобальну нормалізацію `time_to_extinguish` композит став **міжсценарно порівнюваним напряму** (без зміщення від локального min/max у кожному сценарії).
 
 **Інтерпретація:**
 - Ближче до `0` — сценарій відносно безпечніший (менше вигоряння/інтенсивність/тривалість).
