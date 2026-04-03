@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from src.app.experiments.analysis import analyze_results
 
 
@@ -38,9 +40,15 @@ def test_analysis_includes_all_uncensored_and_quantiles() -> None:
 
     assert summary.overall["baf_mean_all"] == 0.5
     assert summary.overall["baf_mean_uncensored"] == 0.1
-    assert summary.overall["baf_p25"] <= summary.overall["baf_p50"] <= summary.overall["baf_p75"] <= summary.overall["baf_p95"]
+    assert summary.overall["baf_p25"] == pytest.approx(0.3)
+    assert summary.overall["baf_p50"] == pytest.approx(0.5)
+    assert summary.overall["baf_p75"] == pytest.approx(0.7)
+    assert summary.overall["baf_p95"] == pytest.approx(0.86)
 
     assert stats["censored_share"] == 0.5
     assert stats["baf_mean_all"] == 0.5
     assert stats["baf_mean_uncensored"] == 0.1
-    assert stats["baf_p25"] <= stats["baf_p50"] <= stats["baf_p75"] <= stats["baf_p95"]
+    assert stats["baf_p25"] == pytest.approx(0.3)
+    assert stats["baf_p50"] == pytest.approx(0.5)
+    assert stats["baf_p75"] == pytest.approx(0.7)
+    assert stats["baf_p95"] == pytest.approx(0.86)
