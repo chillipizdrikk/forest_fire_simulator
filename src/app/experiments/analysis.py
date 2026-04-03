@@ -13,9 +13,9 @@ class AnalysisSummary:
     overall: dict[str, Any]
     by_scenario: dict[str, dict[str, Any]]
     scenario_ranking: list[tuple[str, float]]
-    correlations: list[tuple[str, str, float]]
-    controlled_correlations: list[tuple[str, str, float]]
-    correlations_by_scenario: dict[str, list[tuple[str, str, float]]]
+    correlations: list[tuple[str, str, float, float, float]]
+    controlled_correlations: list[tuple[str, str, float, float, float]]
+    correlations_by_scenario: dict[str, list[tuple[str, str, float, float, float]]]
     correlations_by_scenario_diagnostics: dict[str, dict[str, Any]]
 
 
@@ -50,6 +50,58 @@ def _bootstrap_mean_ci(
     alpha = (1.0 - confidence) / 2.0
     ci_low = _percentile(sample_means, alpha)
     ci_high = _percentile(sample_means, 1.0 - alpha)
+    return ci_low, ci_high
+
+
+def _pearson_corr(xs: list[float], ys: list[float]) -> float | None:
+    if not xs or not ys or len(xs) != len(ys):
+        return None
+    x_mean = mean(xs)
+    y_mean = mean(ys)
+    x_std = (sum((x - x_mean) ** 2 for x in xs) / len(xs)) ** 0.5
+    y_std = (sum((y - y_mean) ** 2 for y in ys) / len(ys)) ** 0.5
+    if x_std == 0.0 or y_std == 0.0:
+        return None
+    cov = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys)) / len(xs)
+    return float(cov / (x_std * y_std))
+
+
+def _bootstrap_corr_ci(
+    xs: list[float],
+    ys: list[float],
+    *,
+    confidence: float = 0.95,
+    n_resamples: int = 1000,
+    seed: int = 42,
+) -> tuple[float, float]:
+    if not xs or not ys or len(xs) != len(ys):
+        return 0.0, 0.0
+    if len(xs) == 1:
+        corr = _pearson_corr(xs, ys)
+        if corr is None:
+            return 0.0, 0.0
+        return corr, corr
+
+    rng = Random(seed)
+    n = len(xs)
+    sample_corrs: list[float] = []
+    for _ in range(n_resamples):
+        idxs = [rng.randrange(n) for _ in range(n)]
+        bxs = [xs[i] for i in idxs]
+        bys = [ys[i] for i in idxs]
+        corr = _pearson_corr(bxs, bys)
+        if corr is not None:
+            sample_corrs.append(corr)
+
+    if not sample_corrs:
+        corr = _pearson_corr(xs, ys)
+        if corr is None:
+            return 0.0, 0.0
+        return corr, corr
+
+    alpha = (1.0 - confidence) / 2.0
+    ci_low = _percentile(sample_corrs, alpha)
+    ci_high = _percentile(sample_corrs, 1.0 - alpha)
     return ci_low, ci_high
 
 
@@ -227,7 +279,7 @@ def analyze_results(
         metric_keys,
         top_n=correlation_top_n,
     )
-    correlations_by_scenario: dict[str, list[tuple[str, str, float]]] = {}
+    correlations_by_scenario: dict[str, list[tuple[str, str, float, float, float]]] = {}
     correlations_by_scenario_diagnostics: dict[str, dict[str, Any]] = {}
     for scenario_name, scenario_rows in by_scenario.items():
         non_constant_params = _count_non_constant_params(scenario_rows, numeric_param_keys)
@@ -265,22 +317,19 @@ def _collect_top_correlations(
     metric_keys: list[str],
     *,
     top_n: int,
-) -> list[tuple[str, str, float]]:
-    correlations: list[tuple[str, str, float]] = []
+) -> list[tuple[str, str, float, float, float]]:
+    correlations: list[tuple[str, str, float, float, float]] = []
     for pkey in numeric_param_keys:
         px = [float(row.get(pkey, 0.0)) for row in rows]
-        p_mean = mean(px) if px else 0.0
-        p_std = (sum((x - p_mean) ** 2 for x in px) / len(px)) ** 0.5 if px else 0.0
-        if p_std == 0:
+        if not px:
             continue
         for mkey in metric_keys:
             my = [float(row.get(mkey, 0.0)) for row in rows]
-            m_mean = mean(my) if my else 0.0
-            m_std = (sum((y - m_mean) ** 2 for y in my) / len(my)) ** 0.5 if my else 0.0
-            if m_std == 0:
+            corr = _pearson_corr(px, my)
+            if corr is None:
                 continue
-            cov = sum((x - p_mean) * (y - m_mean) for x, y in zip(px, my)) / len(px)
-            correlations.append((pkey, mkey, float(cov / (p_std * m_std))))
+            ci_low, ci_high = _bootstrap_corr_ci(px, my, confidence=0.95, n_resamples=1000)
+            correlations.append((pkey, mkey, corr, ci_low, ci_high))
     correlations.sort(key=lambda item: abs(item[2]), reverse=True)
     return correlations[:top_n]
 
@@ -305,7 +354,7 @@ def _collect_controlled_top_correlations(
     metric_keys: list[str],
     *,
     top_n: int,
-) -> list[tuple[str, str, float]]:
+) -> list[tuple[str, str, float, float, float]]:
     scenario_means: dict[str, dict[str, float]] = {}
     keys_for_demean = numeric_param_keys + metric_keys
     for scenario_name, scenario_rows in by_scenario.items():
@@ -314,16 +363,14 @@ def _collect_controlled_top_correlations(
             values = [float(row.get(key, 0.0)) for row in scenario_rows]
             scenario_means[scenario_name][key] = float(mean(values)) if values else 0.0
 
-    correlations: list[tuple[str, str, float]] = []
+    correlations: list[tuple[str, str, float, float, float]] = []
     for pkey in numeric_param_keys:
         px = [
             float(row.get(pkey, 0.0)) - scenario_means[str(row["scenario"])][pkey]
             for row in rows
             if str(row["scenario"]) in scenario_means
         ]
-        p_mean = mean(px) if px else 0.0
-        p_std = (sum((x - p_mean) ** 2 for x in px) / len(px)) ** 0.5 if px else 0.0
-        if p_std == 0:
+        if not px:
             continue
         for mkey in metric_keys:
             my = [
@@ -331,12 +378,11 @@ def _collect_controlled_top_correlations(
                 for row in rows
                 if str(row["scenario"]) in scenario_means
             ]
-            m_mean = mean(my) if my else 0.0
-            m_std = (sum((y - m_mean) ** 2 for y in my) / len(my)) ** 0.5 if my else 0.0
-            if m_std == 0:
+            corr = _pearson_corr(px, my)
+            if corr is None:
                 continue
-            cov = sum((x - p_mean) * (y - m_mean) for x, y in zip(px, my)) / len(px)
-            correlations.append((pkey, mkey, float(cov / (p_std * m_std))))
+            ci_low, ci_high = _bootstrap_corr_ci(px, my, confidence=0.95, n_resamples=1000)
+            correlations.append((pkey, mkey, corr, ci_low, ci_high))
 
     correlations.sort(key=lambda item: abs(item[2]), reverse=True)
     return correlations[:top_n]
@@ -709,13 +755,13 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     md_lines.append("")
     md_lines.append("## Top parameter-metric correlations (uncontrolled)")
     md_lines.append("- Note: these are global correlations without controlling for scenario.")
-    for pkey, mkey, corr in top_corr_uncontrolled:
-        md_lines.append(f"- {pkey} vs {mkey}: {corr:.4f}")
+    for pkey, mkey, corr, ci_low, ci_high in top_corr_uncontrolled:
+        md_lines.append(f"- {pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}")
     md_lines.append("")
     md_lines.append("## Top parameter-metric correlations (controlled by scenario)")
     md_lines.append("- Method: within-scenario demeaning (scenario fixed-effects style).")
-    for pkey, mkey, corr in top_corr_controlled:
-        md_lines.append(f"- {pkey} vs {mkey}: {corr:.4f}")
+    for pkey, mkey, corr, ci_low, ci_high in top_corr_controlled:
+        md_lines.append(f"- {pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}")
     md_lines.append("")
     md_lines.append("## Scenario-local top parameter-metric correlations")
     for scenario_name in sorted_scenario_names:
@@ -733,8 +779,8 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
                     f"- ⚠️ Correlation is weakly identified: all param_* are constant "
                     f"({runs} runs, varying params: 0/{total_param_count})."
                 )
-            for pkey, mkey, corr in scenario_corr[:5]:
-                md_lines.append(f"- {pkey} vs {mkey}: {corr:.4f}")
+            for pkey, mkey, corr, ci_low, ci_high in scenario_corr[:5]:
+                md_lines.append(f"- {pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}")
         else:
             md_lines.append(
                 (
@@ -868,13 +914,13 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
     html_lines.append("</ol><h2>Top parameter-metric correlations (uncontrolled)</h2>")
     html_lines.append("<p>Note: these are global correlations without controlling for scenario.</p><ul>")
-    for pkey, mkey, corr in top_corr_uncontrolled:
-        html_lines.append(f"<li>{pkey} vs {mkey}: {corr:.4f}</li>")
+    for pkey, mkey, corr, ci_low, ci_high in top_corr_uncontrolled:
+        html_lines.append(f"<li>{pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}</li>")
     html_lines.append("</ul>")
     html_lines.append("<h2>Top parameter-metric correlations (controlled by scenario)</h2>")
     html_lines.append("<p>Method: within-scenario demeaning (scenario fixed-effects style).</p><ul>")
-    for pkey, mkey, corr in top_corr_controlled:
-        html_lines.append(f"<li>{pkey} vs {mkey}: {corr:.4f}</li>")
+    for pkey, mkey, corr, ci_low, ci_high in top_corr_controlled:
+        html_lines.append(f"<li>{pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}</li>")
     html_lines.append("</ul>")
     html_lines.append("<h2>Scenario-local top parameter-metric correlations</h2>")
     for scenario_name in sorted_scenario_names:
@@ -893,8 +939,8 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
                     f"({runs} runs, varying params: 0/{total_param_count}).</p>"
                 )
             html_lines.append("<ul>")
-            for pkey, mkey, corr in scenario_corr[:5]:
-                html_lines.append(f"<li>{pkey} vs {mkey}: {corr:.4f}</li>")
+            for pkey, mkey, corr, ci_low, ci_high in scenario_corr[:5]:
+                html_lines.append(f"<li>{pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}</li>")
             html_lines.append("</ul>")
         else:
             html_lines.append(
