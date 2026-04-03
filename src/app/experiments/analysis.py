@@ -89,14 +89,34 @@ def analyze_results(
     correlation_top_n: int = 10,
     scenario_correlation_min_runs: int = 5,
 ) -> AnalysisSummary:
+    uncensored_all = _uncensored_rows(rows)
+    global_tte_rows = uncensored_all if uncensored_all else rows
+    global_tte_values = [float(row.get("time_to_extinguish", 0.0)) for row in global_tte_rows]
+    global_tte_norm = _normalize_01(global_tte_values)
+    global_tte_norm_by_run_id = {
+        str(row.get("run_id", f"row_{idx}")): norm for idx, (row, norm) in enumerate(zip(global_tte_rows, global_tte_norm))
+    }
+
     by_scenario: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         by_scenario.setdefault(str(row["scenario"]), []).append(row)
 
     baf_values = [float(row.get("baf", 0.0)) for row in rows]
-    uncensored_all = _uncensored_rows(rows)
     censored_runs_count = int(sum(bool(row.get("truncated_by_max_steps", False)) for row in rows))
     censored_runs_share = float(censored_runs_count / len(rows)) if rows else 0.0
+    tte_min = min(global_tte_values) if global_tte_values else 0.0
+    tte_max = max(global_tte_values) if global_tte_values else 0.0
+    tte_span = tte_max - tte_min
+    for row in rows:
+        run_id = str(row.get("run_id", ""))
+        if run_id in global_tte_norm_by_run_id:
+            row["time_to_extinguish_global_norm"] = float(global_tte_norm_by_run_id[run_id])
+            continue
+        if tte_span == 0.0:
+            row["time_to_extinguish_global_norm"] = 0.0
+            continue
+        tte_value = float(row.get("time_to_extinguish", 0.0))
+        row["time_to_extinguish_global_norm"] = _clamp_01((tte_value - tte_min) / tte_span)
     overall = {
         "runs_total": len(rows),
         "baf_mean": float(mean(baf_values)) if baf_values else 0.0,
@@ -122,6 +142,9 @@ def analyze_results(
         "scenario_ranking_metric": ranking_metric,
         "censored_runs_count": censored_runs_count,
         "censored_runs_share": censored_runs_share,
+        "time_to_extinguish_norm_scope": "uncensored_only" if uncensored_all else "all_runs",
+        "time_to_extinguish_global_min": tte_min,
+        "time_to_extinguish_global_max": tte_max,
     }
 
     scenario_stats: dict[str, dict[str, Any]] = {}
@@ -131,9 +154,8 @@ def analyze_results(
         local_auc = [float(item.get("auc", 0.0)) for item in items]
         local_peak_norm = [float(item.get("peak_fire_fraction", 0.0)) for item in items]
         local_auc_norm = [float(item.get("auc_normalized", 0.0)) for item in items]
-        local_tte = [float(item.get("time_to_extinguish", 0.0)) for item in items]
         uncensored_items = _uncensored_rows(items)
-        local_tte_norm = _normalize_01(local_tte)
+        run_tte_global_norm = [float(item.get("time_to_extinguish_global_norm", 0.0)) for item in items]
         run_risk_scores = [
             float(
                 mean(
@@ -141,11 +163,18 @@ def analyze_results(
                         _clamp_01(baf),
                         _clamp_01(auc_norm),
                         _clamp_01(peak_norm),
-                        _clamp_01(tte_norm),
+                        _clamp_01(tte_global_norm),
                     ]
                 )
             )
-            for baf, auc_norm, peak_norm, tte_norm in zip(local_baf, local_auc_norm, local_peak_norm, local_tte_norm)
+            for baf, auc_norm, peak_norm, tte_global_norm in zip(
+                local_baf, local_auc_norm, local_peak_norm, run_tte_global_norm
+            )
+        ]
+        run_risk_scores_uncensored = [
+            score
+            for item, score in zip(items, run_risk_scores)
+            if not bool(item.get("truncated_by_max_steps", False))
         ]
         baf_mean_ci_low, baf_mean_ci_high = _bootstrap_mean_ci(local_baf, confidence=0.95)
         risk_mean_ci_low, risk_mean_ci_high = _bootstrap_mean_ci(run_risk_scores, confidence=0.95)
@@ -175,6 +204,9 @@ def analyze_results(
             "time_to_extinguish_mean_all": float(mean(float(item.get("time_to_extinguish", 0.0)) for item in items)),
             "time_to_extinguish_mean_uncensored": _mean_metric(uncensored_items, "time_to_extinguish"),
             "risk_score_mean": float(mean(run_risk_scores)) if run_risk_scores else 0.0,
+            "risk_score_mean_uncensored": (
+                float(mean(run_risk_scores_uncensored)) if run_risk_scores_uncensored else 0.0
+            ),
             "risk_score_mean_ci_low": risk_mean_ci_low,
             "risk_score_mean_ci_high": risk_mean_ci_high,
         }
