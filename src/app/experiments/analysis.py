@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from random import Random
+import re
 from statistics import mean
 from typing import Any
 
@@ -309,6 +310,29 @@ def _collect_controlled_top_correlations(
     return correlations[:top_n]
 
 
+def _parse_ofat_scenario_name(name: str) -> tuple[str, str, float] | None:
+    """Parse OFAT scenario names like '<base>_<param>_<value_token>'."""
+    value_match = re.search(r"_(\d+)$", name)
+    if not value_match:
+        return None
+
+    value_token = value_match.group(1)
+    prefix = name[: -len(value_token) - 1]
+    for param_name in ("humidity", "wind_strength", "temperature_c"):
+        marker = f"_{param_name}_"
+        if marker not in name:
+            continue
+        base_name = prefix[: -len(param_name) - 1]
+        if not base_name:
+            return None
+        try:
+            value = float(value_token) / 100.0 if param_name == "humidity" else float(value_token)
+        except ValueError:
+            return None
+        return base_name, param_name, value
+    return None
+
+
 def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
     figures_dir.mkdir(parents=True, exist_ok=True)
     generated: list[Path] = []
@@ -321,7 +345,10 @@ def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
     for row in rows:
         grouped.setdefault(str(row["scenario"]), []).append(float(row.get("baf", 0.0)))
 
-    labels = sorted(grouped.keys())
+    labels_all = sorted(grouped.keys())
+    ofat_labels = [label for label in labels_all if _parse_ofat_scenario_name(label) is not None]
+    base_labels = [label for label in labels_all if label not in ofat_labels]
+    labels = base_labels if base_labels else labels_all
     values = [grouped[label] for label in labels]
 
     # Global histogram (all scenarios mixed) with scenario means for quick orientation.
@@ -358,6 +385,22 @@ def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
         fig.savefig(box_path)
         plt.close(fig)
         generated.append(box_path)
+
+    # Keep OFAT variants separate to avoid overcrowding core scenario comparisons.
+    if ofat_labels:
+        ofat_values = [grouped[label] for label in ofat_labels]
+        fig = plt.figure(figsize=(max(10, len(ofat_labels) * 0.45), 5.2))
+        plt.boxplot(ofat_values, tick_labels=ofat_labels, showfliers=False)
+        plt.title("OFAT subscenario comparison by burned area fraction")
+        plt.ylabel("baf")
+        plt.ylim(-0.02, 1.02)
+        plt.xticks(rotation=35, ha="right", fontsize=8)
+        plt.grid(axis="y", alpha=0.25, linestyle=":")
+        ofat_box_path = figures_dir / "scenario_baf_boxplot_ofat.png"
+        fig.tight_layout()
+        fig.savefig(ofat_box_path)
+        plt.close(fig)
+        generated.append(ofat_box_path)
 
     # Per-scenario histograms in a small-multiples layout for local interpretation.
     if labels:
@@ -419,6 +462,50 @@ def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
         fig.savefig(summary_path)
         plt.close(fig)
         generated.append(summary_path)
+
+    if ofat_labels:
+        ofat_by_base_and_param: dict[tuple[str, str], list[tuple[float, float]]] = {}
+        for label in ofat_labels:
+            parsed = _parse_ofat_scenario_name(label)
+            if not parsed:
+                continue
+            base_name, param_name, value = parsed
+            local = grouped[label]
+            local_mean = sum(local) / len(local) if local else 0.0
+            ofat_by_base_and_param.setdefault((base_name, param_name), []).append((value, local_mean))
+
+        if ofat_by_base_and_param:
+            base_names = sorted({base for base, _ in ofat_by_base_and_param.keys()})
+            fig, axes = plt.subplots(
+                len(base_names),
+                1,
+                figsize=(8.4, max(3.2, 3.0 * len(base_names))),
+                squeeze=False,
+                sharey=True,
+            )
+            colors = {"humidity": "#2b8cbe", "wind_strength": "#e34a33", "temperature_c": "#31a354"}
+            for row_index, base_name in enumerate(base_names):
+                ax = axes[row_index][0]
+                for param_name in ("humidity", "wind_strength", "temperature_c"):
+                    pairs = sorted(ofat_by_base_and_param.get((base_name, param_name), []), key=lambda item: item[0])
+                    if not pairs:
+                        continue
+                    xs = [item[0] for item in pairs]
+                    ys = [item[1] for item in pairs]
+                    ax.plot(xs, ys, marker="o", linewidth=1.8, label=param_name, color=colors[param_name])
+                ax.set_title(base_name)
+                ax.set_ylim(-0.02, 1.02)
+                ax.grid(alpha=0.25, linestyle=":")
+                ax.set_ylabel("mean baf")
+                ax.legend(frameon=False, fontsize=8, ncol=3, loc="upper right")
+
+            axes[-1][0].set_xlabel("parameter value")
+            fig.suptitle("OFAT sensitivity curves (mean BAF)", y=1.01)
+            ofat_curve_path = figures_dir / "scenario_baf_mean_ofat_curves.png"
+            fig.tight_layout()
+            fig.savefig(ofat_curve_path)
+            plt.close(fig)
+            generated.append(ofat_curve_path)
 
     return generated
 
@@ -636,12 +723,17 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         md_lines.append("## Figures")
         figure_notes = {
             "baf_hist": "Global BAF histogram across all scenarios; dashed lines mark per-scenario means.",
-            "scenario_baf_boxplot": "Per-scenario BAF boxplots (median, IQR, outliers). Useful for ranking spread and stability.",
+            "scenario_baf_boxplot": (
+                "Per-scenario BAF boxplots for core scenarios only (median, IQR, outliers). "
+                "OFAT variants are shown separately."
+            ),
+            "scenario_baf_boxplot_ofat": "Separate BAF boxplots for OFAT subscenarios to avoid overcrowding.",
             "scenario_baf_hist_grid": (
                 "Small-multiple histograms with fixed BAF bins and per-panel y-scale: "
                 "each panel shows one scenario distribution."
             ),
             "scenario_baf_mean_iqr": "Scenario mean BAF with interquartile range as asymmetric error bars.",
+            "scenario_baf_mean_ofat_curves": "OFAT sensitivity curves: mean BAF vs varied parameter value by base scenario.",
         }
         for fig_path in figures:
             rel = fig_path.relative_to(output_dir)
@@ -792,12 +884,14 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         html_lines.append("<h2>Figures</h2>")
         figure_notes = {
             "baf_hist": "Global BAF histogram across all scenarios; dashed lines mark per-scenario means.",
-            "scenario_baf_boxplot": "Per-scenario BAF boxplots (median, IQR, outliers).",
+            "scenario_baf_boxplot": "Per-scenario BAF boxplots for core scenarios only (median, IQR, outliers).",
+            "scenario_baf_boxplot_ofat": "Separate BAF boxplots for OFAT subscenarios to avoid overcrowding.",
             "scenario_baf_hist_grid": (
                 "Small-multiple histograms with fixed BAF bins and per-panel y-scale: "
                 "each panel shows one scenario distribution."
             ),
             "scenario_baf_mean_iqr": "Scenario mean BAF with interquartile range as asymmetric error bars.",
+            "scenario_baf_mean_ofat_curves": "OFAT sensitivity curves: mean BAF vs varied parameter value by base scenario.",
         }
         for fig_path in figures:
             rel = fig_path.relative_to(output_dir)
