@@ -17,14 +17,26 @@ class AnalysisSummary:
     controlled_correlations: list[tuple[str, str, float, float, float]]
     correlations_by_scenario: dict[str, list[tuple[str, str, float, float, float]]]
     correlations_by_scenario_diagnostics: dict[str, dict[str, Any]]
+    correlations_by_family: dict[str, list[tuple[str, str, float, float, float, float, float, float]]]
+    correlations_by_family_diagnostics: dict[str, dict[str, Any]]
 
 
 def _percentile(values: list[float], q: float) -> float:
     if not values:
         return 0.0
     ordered = sorted(values)
-    idx = int((len(ordered) - 1) * q)
-    return float(ordered[idx])
+    if len(ordered) == 1:
+        return float(ordered[0])
+    q_clamped = _clamp_01(float(q))
+    pos = (len(ordered) - 1) * q_clamped
+    lower_idx = int(pos)
+    upper_idx = min(lower_idx + 1, len(ordered) - 1)
+    if lower_idx == upper_idx:
+        return float(ordered[lower_idx])
+    fraction = pos - lower_idx
+    lower = ordered[lower_idx]
+    upper = ordered[upper_idx]
+    return float(lower + fraction * (upper - lower))
 
 
 def _bootstrap_mean_ci(
@@ -102,6 +114,57 @@ def _bootstrap_corr_ci(
     alpha = (1.0 - confidence) / 2.0
     ci_low = _percentile(sample_corrs, alpha)
     ci_high = _percentile(sample_corrs, 1.0 - alpha)
+    return ci_low, ci_high
+
+
+def _linear_slope(xs: list[float], ys: list[float]) -> float | None:
+    if not xs or not ys or len(xs) != len(ys):
+        return None
+    x_mean = mean(xs)
+    denom = sum((x - x_mean) ** 2 for x in xs)
+    if denom == 0.0:
+        return None
+    y_mean = mean(ys)
+    numer = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys))
+    return float(numer / denom)
+
+
+def _bootstrap_slope_ci(
+    xs: list[float],
+    ys: list[float],
+    *,
+    confidence: float = 0.95,
+    n_resamples: int = 1000,
+    seed: int = 42,
+) -> tuple[float, float]:
+    if not xs or not ys or len(xs) != len(ys):
+        return 0.0, 0.0
+    if len(xs) == 1:
+        slope = _linear_slope(xs, ys)
+        if slope is None:
+            return 0.0, 0.0
+        return slope, slope
+
+    rng = Random(seed)
+    n = len(xs)
+    sample_slopes: list[float] = []
+    for _ in range(n_resamples):
+        idxs = [rng.randrange(n) for _ in range(n)]
+        bxs = [xs[i] for i in idxs]
+        bys = [ys[i] for i in idxs]
+        slope = _linear_slope(bxs, bys)
+        if slope is not None:
+            sample_slopes.append(slope)
+
+    if not sample_slopes:
+        slope = _linear_slope(xs, ys)
+        if slope is None:
+            return 0.0, 0.0
+        return slope, slope
+
+    alpha = (1.0 - confidence) / 2.0
+    ci_low = _percentile(sample_slopes, alpha)
+    ci_high = _percentile(sample_slopes, 1.0 - alpha)
     return ci_low, ci_high
 
 
@@ -300,6 +363,47 @@ def analyze_results(
             top_n=correlation_top_n,
         )
 
+    family_rows: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        scenario_name = str(row.get("scenario", ""))
+        parsed = _parse_ofat_scenario_name(scenario_name)
+        family_name = parsed[0] if parsed else scenario_name
+        family_rows.setdefault(family_name, []).append(row)
+
+    family_metric_keys = ["baf", "auc_normalized", "time_to_extinguish"]
+    correlations_by_family: dict[str, list[tuple[str, str, float, float, float, float, float, float]]] = {}
+    correlations_by_family_diagnostics: dict[str, dict[str, Any]] = {}
+    for family_name, items in family_rows.items():
+        non_constant_params = _count_non_constant_params(items, numeric_param_keys)
+        constant_params = [pkey for pkey in numeric_param_keys if pkey not in non_constant_params]
+        correlations_by_family_diagnostics[family_name] = {
+            "runs": len(items),
+            "min_runs_required": scenario_correlation_min_runs,
+            "non_constant_param_count": len(non_constant_params),
+            "total_param_count": len(numeric_param_keys),
+            "constant_param_keys": constant_params,
+        }
+        if len(items) < scenario_correlation_min_runs:
+            continue
+
+        family_corrs: list[tuple[str, str, float, float, float, float, float, float]] = []
+        for pkey in non_constant_params:
+            px = [float(row.get(pkey, 0.0)) for row in items]
+            for mkey in family_metric_keys:
+                my = [float(row.get(mkey, 0.0)) for row in items]
+                corr = _pearson_corr(px, my)
+                slope = _linear_slope(px, my)
+                if corr is None or slope is None:
+                    continue
+                corr_ci_low, corr_ci_high = _bootstrap_corr_ci(px, my, confidence=0.95, n_resamples=1000)
+                slope_ci_low, slope_ci_high = _bootstrap_slope_ci(px, my, confidence=0.95, n_resamples=1000)
+                family_corrs.append(
+                    (pkey, mkey, corr, corr_ci_low, corr_ci_high, slope, slope_ci_low, slope_ci_high)
+                )
+        family_corrs.sort(key=lambda item: abs(item[2]), reverse=True)
+        if family_corrs:
+            correlations_by_family[family_name] = family_corrs[:correlation_top_n]
+
     return AnalysisSummary(
         overall=overall,
         by_scenario=scenario_stats,
@@ -308,6 +412,8 @@ def analyze_results(
         controlled_correlations=controlled_correlations,
         correlations_by_scenario=correlations_by_scenario,
         correlations_by_scenario_diagnostics=correlations_by_scenario_diagnostics,
+        correlations_by_family=correlations_by_family,
+        correlations_by_family_diagnostics=correlations_by_family_diagnostics,
     )
 
 
@@ -660,6 +766,13 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     top_corr_uncontrolled = summary.correlations[:5]
     top_corr_controlled = summary.controlled_correlations[:5]
     sorted_scenario_names = sorted(summary.by_scenario.keys())
+    sorted_family_names = sorted(summary.correlations_by_family_diagnostics.keys())
+    elevated_censoring = [
+        (name, float(stats.get("censored_share", 0.0)))
+        for name, stats in summary.by_scenario.items()
+        if float(stats.get("censored_share", 0.0)) >= 0.06
+    ]
+    elevated_censoring.sort(key=lambda item: item[1], reverse=True)
 
     md_path = output_dir / "summary.md"
     html_path = output_dir / "summary.html"
@@ -719,6 +832,11 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     md_lines.append("### KPI comparison by scenario (all / uncensored)")
     for name in sorted_scenario_names:
         stats = summary.by_scenario[name]
+        censoring_note = (
+            " ⚠️ reliability: time_to_extinguish/AUC may be less reliable; consider larger max_steps."
+            if float(stats.get("censored_share", 0.0)) >= 0.06
+            else ""
+        )
         md_lines.append(
             "- "
             f"{name}: baf={stats['baf_mean_all']:.4f}/{stats['baf_mean_uncensored']:.4f}, "
@@ -727,7 +845,15 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
             f"critical={stats['critical_mean_all']:.4f}/{stats['critical_mean_uncensored']:.4f}, "
             f"censored_share={stats['censored_share']:.4f}, "
             f"baf_q(p25/p50/p75/p95)={stats['baf_p25']:.4f}/{stats['baf_p50']:.4f}/{stats['baf_p75']:.4f}/{stats['baf_p95']:.4f}"
+            f"{censoring_note}"
         )
+    if elevated_censoring:
+        md_lines.append("### Censoring reliability flags")
+        md_lines.append(
+            "- Scenarios with censored_share >= 0.06 should be interpreted with care for time_to_extinguish/AUC."
+        )
+        for name, share in elevated_censoring:
+            md_lines.append(f"- {name}: censored_share={share:.4f}")
     md_lines.append("### Mean burned area fraction (95% bootstrap CI)")
     for name, baf_mean, ci_low, ci_high in top_worst_abs_baf_with_ci:
         md_lines.append(f"- {name}: {baf_mean:.4f} (95% CI: {ci_low:.4f}..{ci_high:.4f})")
@@ -794,6 +920,36 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
             suffix = "..." if len(constant_param_keys) > 5 else ""
             md_lines.append(
                 f"- ⚠️ Constant param_* in this scenario ({len(constant_param_keys)}): {shown_keys}{suffix}"
+            )
+
+    md_lines.append("")
+    md_lines.append("## Family-level parameter sensitivity (OFAT-aware)")
+    md_lines.append(
+        "- Grouping rule: OFAT scenarios are grouped by base family (e.g. `<base>_humidity_*` -> `<base>`), "
+        "other scenarios remain as-is."
+    )
+    md_lines.append("- For each family: Pearson correlation and linear slope with 95% bootstrap CI.")
+    for family_name in sorted_family_names:
+        family_corr = summary.correlations_by_family.get(family_name)
+        diag = summary.correlations_by_family_diagnostics.get(family_name, {})
+        runs = int(diag.get("runs", 0))
+        non_constant_param_count = int(diag.get("non_constant_param_count", 0))
+        total_param_count = int(diag.get("total_param_count", 0))
+        min_runs = int(diag.get("min_runs_required", 5))
+        md_lines.append(f"### {family_name}")
+        if family_corr:
+            for pkey, mkey, corr, corr_ci_low, corr_ci_high, slope, slope_ci_low, slope_ci_high in family_corr[:5]:
+                md_lines.append(
+                    f"- {pkey} vs {mkey}: r={corr:.4f} (95% CI {corr_ci_low:.4f}..{corr_ci_high:.4f}), "
+                    f"slope={slope:.4f} (95% CI {slope_ci_low:.4f}..{slope_ci_high:.4f})"
+                )
+        else:
+            md_lines.append(
+                (
+                    "- Not enough information for family-level sensitivity estimation "
+                    f"(runs: {runs}, minimum: {min_runs}, varying params: "
+                    f"{non_constant_param_count}/{total_param_count})."
+                )
             )
 
     if figures:
@@ -878,6 +1034,11 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     html_lines.append("</ol><h3>KPI comparison by scenario (all / uncensored)</h3><ul>")
     for name in sorted_scenario_names:
         stats = summary.by_scenario[name]
+        censoring_note = (
+            " ⚠️ reliability: time_to_extinguish/AUC may be less reliable; consider larger max_steps."
+            if float(stats.get("censored_share", 0.0)) >= 0.06
+            else ""
+        )
         html_lines.append(
             "<li>"
             f"{name}: baf={stats['baf_mean_all']:.4f}/{stats['baf_mean_uncensored']:.4f}, "
@@ -885,9 +1046,19 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
             f"time_to_extinguish={stats['time_to_extinguish_mean_all']:.4f}/{stats['time_to_extinguish_mean_uncensored']:.4f}, "
             f"critical={stats['critical_mean_all']:.4f}/{stats['critical_mean_uncensored']:.4f}, "
             f"censored_share={stats['censored_share']:.4f}, "
-            f"baf_q(p25/p50/p75/p95)={stats['baf_p25']:.4f}/{stats['baf_p50']:.4f}/{stats['baf_p75']:.4f}/{stats['baf_p95']:.4f}</li>"
+            f"baf_q(p25/p50/p75/p95)={stats['baf_p25']:.4f}/{stats['baf_p50']:.4f}/{stats['baf_p75']:.4f}/{stats['baf_p95']:.4f}"
+            f"{censoring_note}</li>"
         )
     html_lines.append("</ul>")
+    if elevated_censoring:
+        html_lines.append("<h3>Censoring reliability flags</h3>")
+        html_lines.append(
+            "<p>Scenarios with censored_share &gt;= 0.06 should be interpreted with care for time_to_extinguish/AUC.</p>"
+        )
+        html_lines.append("<ul>")
+        for name, share in elevated_censoring:
+            html_lines.append(f"<li>{name}: censored_share={share:.4f}</li>")
+        html_lines.append("</ul>")
     html_lines.append("<h3>Mean burned area fraction (95% bootstrap CI)</h3><ol>")
     for name, baf_mean, ci_low, ci_high in top_worst_abs_baf_with_ci:
         html_lines.append(f"<li>{name}: {baf_mean:.4f} (95% CI: {ci_low:.4f}..{ci_high:.4f})</li>")
@@ -956,6 +1127,37 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
             html_lines.append(
                 "<p>⚠️ Constant param_* in this scenario "
                 f"({len(constant_param_keys)}): {shown_keys}{suffix}</p>"
+            )
+
+    html_lines.append("<h2>Family-level parameter sensitivity (OFAT-aware)</h2>")
+    html_lines.append(
+        "<p>Grouping rule: OFAT scenarios are grouped by base family (e.g. "
+        "<code>&lt;base&gt;_humidity_*</code> -&gt; <code>&lt;base&gt;</code>), other scenarios remain as-is.</p>"
+    )
+    html_lines.append("<p>For each family: Pearson correlation and linear slope with 95% bootstrap CI.</p>")
+    for family_name in sorted_family_names:
+        family_corr = summary.correlations_by_family.get(family_name)
+        diag = summary.correlations_by_family_diagnostics.get(family_name, {})
+        runs = int(diag.get("runs", 0))
+        non_constant_param_count = int(diag.get("non_constant_param_count", 0))
+        total_param_count = int(diag.get("total_param_count", 0))
+        min_runs = int(diag.get("min_runs_required", 5))
+        html_lines.append(f"<h3>{family_name}</h3>")
+        if family_corr:
+            html_lines.append("<ul>")
+            for pkey, mkey, corr, corr_ci_low, corr_ci_high, slope, slope_ci_low, slope_ci_high in family_corr[:5]:
+                html_lines.append(
+                    f"<li>{pkey} vs {mkey}: r={corr:.4f} (95% CI {corr_ci_low:.4f}..{corr_ci_high:.4f}), "
+                    f"slope={slope:.4f} (95% CI {slope_ci_low:.4f}..{slope_ci_high:.4f})</li>"
+                )
+            html_lines.append("</ul>")
+        else:
+            html_lines.append(
+                (
+                    "<p>Not enough information for family-level sensitivity estimation "
+                    f"(runs: {runs}, minimum: {min_runs}, varying params: "
+                    f"{non_constant_param_count}/{total_param_count}).</p>"
+                )
             )
 
     if figures:
