@@ -28,6 +28,15 @@
 
 - Якщо різниця між `*_mean_all` і `*_mean_uncensored` суттєва, це сигнал про вплив цензурування (`truncated_by_max_steps=True`).
 - У такому разі варто або збільшити `max_steps`, або перейти до survival-підходу для часових KPI (щоб коректно врахувати незгаслі прогони).
+- Практичний прапорець у звіті: сценарії з `censored_share >= 0.06` варто позначати як менш надійні для `time_to_extinguish` та `auc(_normalized)`.
+
+### Family-level sensitivity (OFAT)
+
+- Для OFAT-назв (`<base>_humidity_*`, `<base>_temperature_c_*`, `<base>_wind_strength_*`) корисно агрегувати аналіз на рівні **базової сімʼї** `<base>`.
+- На family-рівні варто дивитися одночасно:
+  - кореляцію `param -> metric` (з bootstrap CI),
+  - лінійний `slope` (проста регресія `metric = a + b*param`, також із bootstrap CI).
+- Це зменшує проблему, коли всередині одного точного `scenario` параметри константні і per-scenario кореляція неідентифікована.
 
 ### Композитний ризик: `risk_score_mean`
 
