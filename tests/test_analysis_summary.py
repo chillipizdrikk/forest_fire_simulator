@@ -144,13 +144,114 @@ def test_analysis_includes_family_level_sensitivity_for_ofat_variants() -> None:
 
     summary = analyze_results(rows)
 
-    family_diag = summary.correlations_by_family_diagnostics["anchor_mid_windy_rain"]
+    family_diag = summary.correlations_by_family_diagnostics["anchor_mid_windy_rain / humidity"]
     assert family_diag["non_constant_param_count"] == 1
-    family_corr = summary.correlations_by_family["anchor_mid_windy_rain"]
+    family_corr = summary.correlations_by_family["anchor_mid_windy_rain / humidity"]
     humidity_baf = [item for item in family_corr if item[0] == "param_humidity" and item[1] == "baf"]
     assert humidity_baf
     assert humidity_baf[0][2] < 0.0
     assert humidity_baf[0][5] < 0.0
+
+
+def test_analysis_separates_ofat_axes_in_family_level_sensitivity() -> None:
+    rows = []
+
+    humidity_values = [0.2, 0.3, 0.4]
+    humidity_baf = [0.8, 0.6, 0.4]
+    for idx, (param_value, baf_value) in enumerate(zip(humidity_values, humidity_baf)):
+        rows.append(
+            {
+                "scenario": f"transition_low_humidity_humidity_{int(param_value * 100):03d}",
+                "baf": baf_value,
+                "auc_normalized": baf_value / 10,
+                "time_to_extinguish": 100 - idx * 10,
+                "critical": False,
+                "truncated_by_max_steps": False,
+                "peak_fire_size": 1,
+                "auc": 1,
+                "peak_fire_fraction": 0.1,
+                "max_spread_rate": 1.0,
+                "fire_duration": 10,
+                "param_humidity": param_value,
+                "param_wind_strength": 6.0,
+                "param_temperature_c": 20.0,
+            }
+        )
+        rows.append(
+            {
+                "scenario": f"transition_low_humidity_humidity_{int(param_value * 100):03d}",
+                "baf": baf_value - 0.05,
+                "auc_normalized": (baf_value - 0.05) / 10,
+                "time_to_extinguish": 95 - idx * 10,
+                "critical": False,
+                "truncated_by_max_steps": False,
+                "peak_fire_size": 1,
+                "auc": 1,
+                "peak_fire_fraction": 0.1,
+                "max_spread_rate": 1.0,
+                "fire_duration": 10,
+                "param_humidity": param_value,
+                "param_wind_strength": 6.0,
+                "param_temperature_c": 20.0,
+            }
+        )
+
+    wind_values = [4.0, 6.0, 8.0]
+    wind_baf = [0.2, 0.5, 0.8]
+    for idx, (param_value, baf_value) in enumerate(zip(wind_values, wind_baf)):
+        rows.append(
+            {
+                "scenario": f"transition_low_humidity_wind_strength_{int(param_value):02d}",
+                "baf": baf_value,
+                "auc_normalized": baf_value / 10,
+                "time_to_extinguish": 70 + idx * 10,
+                "critical": False,
+                "truncated_by_max_steps": False,
+                "peak_fire_size": 1,
+                "auc": 1,
+                "peak_fire_fraction": 0.1,
+                "max_spread_rate": 1.0,
+                "fire_duration": 10,
+                "param_humidity": 0.3,
+                "param_wind_strength": param_value,
+                "param_temperature_c": 20.0,
+            }
+        )
+        rows.append(
+            {
+                "scenario": f"transition_low_humidity_wind_strength_{int(param_value):02d}",
+                "baf": baf_value + 0.05,
+                "auc_normalized": (baf_value + 0.05) / 10,
+                "time_to_extinguish": 75 + idx * 10,
+                "critical": False,
+                "truncated_by_max_steps": False,
+                "peak_fire_size": 1,
+                "auc": 1,
+                "peak_fire_fraction": 0.1,
+                "max_spread_rate": 1.0,
+                "fire_duration": 10,
+                "param_humidity": 0.3,
+                "param_wind_strength": param_value,
+                "param_temperature_c": 20.0,
+            }
+        )
+
+    summary = analyze_results(rows)
+
+    humidity_axis_name = "transition_low_humidity / humidity"
+    wind_axis_name = "transition_low_humidity / wind_strength"
+    assert humidity_axis_name in summary.correlations_by_family
+    assert wind_axis_name in summary.correlations_by_family
+
+    humidity_corr = summary.correlations_by_family[humidity_axis_name]
+    assert {item[0] for item in humidity_corr} == {"param_humidity"}
+    humidity_baf_corr = next(item for item in humidity_corr if item[1] == "baf")
+    assert humidity_baf_corr[2] < 0.0
+
+    wind_corr = summary.correlations_by_family[wind_axis_name]
+    assert {item[0] for item in wind_corr} == {"param_wind_strength"}
+    wind_baf_corr = next(item for item in wind_corr if item[1] == "baf")
+    assert wind_baf_corr[2] > 0.0
 
 
 @pytest.mark.parametrize(
