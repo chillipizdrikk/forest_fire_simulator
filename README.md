@@ -38,6 +38,31 @@ python -m src.app.main
 python run_experiments.py --n 100 --seed 42
 ```
 
+### Censoring bias audit (adaptive max_steps reruns)
+
+CLI тепер підтримує автоматичний аудит цензурування:
+- знаходить сценарії з `censored_share >= --censor-target-share`,
+- перезапускає **лише ці** сценарії з більшим `max_steps`,
+- порівнює метрики “до/після” у звіті,
+- зупиняється, коли всі сценарії нижче цільового порогу або вичерпано `--censor-max-retries`.
+
+Приклад:
+
+```bash
+python run_experiments.py \
+  --n 100 \
+  --max-steps 500 \
+  --censor-target-share 0.02 \
+  --censor-max-retries 2 \
+  --censor-step-multiplier 1.6
+```
+
+Щоб вимкнути аудит:
+
+```bash
+python run_experiments.py --disable-censor-audit
+```
+
 ### Recommended experiment patterns
 
 - Keep the same `--n` across all comparisons (for fair scenario ranking):

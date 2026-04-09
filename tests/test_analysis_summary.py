@@ -390,3 +390,47 @@ def test_bool_params_are_excluded_from_continuous_correlations() -> None:
     assert summary.continuous_param_correlations
     assert all(pkey != "param_use_barrier" for pkey, *_ in summary.continuous_param_correlations)
     assert any(pkey == "param_use_barrier" for pkey, *_ in summary.binary_param_effects)
+
+
+def test_pairwise_significance_includes_bh_adjusted_p_values_and_effect_size() -> None:
+    rows = []
+    scenarios = {
+        "s_low": (0.1, 0.1),
+        "s_mid": (0.5, 0.5),
+        "s_high": (0.9, 0.9),
+    }
+    for scenario_name, (baf_base, auc_norm_base) in scenarios.items():
+        for idx in range(12):
+            offset = (idx % 3) * 0.005
+            rows.append(
+                {
+                    "scenario": scenario_name,
+                    "run_id": f"{scenario_name}-{idx}",
+                    "baf": baf_base + offset,
+                    "auc_normalized": auc_norm_base + offset,
+                    "time_to_extinguish": 100.0 + idx,
+                    "critical": baf_base >= 0.8,
+                    "truncated_by_max_steps": False,
+                    "peak_fire_size": 1.0,
+                    "auc": 1.0,
+                    "peak_fire_fraction": 0.1,
+                    "max_spread_rate": 0.5,
+                    "fire_duration": 10.0,
+                    "param_temperature_c": 20.0,
+                }
+            )
+
+    summary = analyze_results(rows, significance_permutations=500)
+
+    assert "baf" in summary.scenario_pairwise_significance
+    assert "auc_normalized" in summary.scenario_pairwise_significance
+
+    baf_tests = summary.scenario_pairwise_significance["baf"]
+    assert len(baf_tests) == 3  # 3 choose 2
+    assert all(float(item["p_value_adj"]) >= float(item["p_value"]) for item in baf_tests)
+    assert all(bool(item["significant_bh_005"]) for item in baf_tests)
+    assert all(str(item["effect_label"]) == "large" for item in baf_tests)
+
+    overview = summary.overall["pairwise_significance_tests"]["baf"]
+    assert overview["pairs_total"] == 3
+    assert overview["significant_bh_005"] == 3
