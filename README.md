@@ -21,6 +21,11 @@ PySide6 desktop simulator for modeling forest fire spread with a cellular automa
 - `src/app/main.py` — application entrypoint.
 - `run_experiments.py` — CLI for multi-run experiments.
 
+## Run virtual enviroment
+```bash
+.\venv\Scripts\activate
+```
+
 ## Run UI
 
 ```bash
