@@ -24,6 +24,7 @@ class AnalysisSummary:
     correlations_by_family: dict[str, list[tuple[str, str, float, float, float, float, float, float]]]
     correlations_by_family_diagnostics: dict[str, dict[str, Any]]
     scenario_pairwise_significance: dict[str, list[dict[str, Any]]]
+    interaction_surfaces: list[dict[str, Any]]
 
 
 def _percentile(values: list[float], q: float) -> float:
@@ -310,6 +311,112 @@ def _pairwise_significance_by_metric(
     return rows
 
 
+def _select_top_baf_params(
+    continuous_correlations: list[tuple[str, str, float, float, float]],
+    *,
+    top_k: int = 2,
+) -> list[str]:
+    selected: list[str] = []
+    for pkey, mkey, corr, *_ in sorted(continuous_correlations, key=lambda item: abs(item[2]), reverse=True):
+        if mkey != "baf":
+            continue
+        if pkey in selected:
+            continue
+        selected.append(pkey)
+        if len(selected) >= top_k:
+            break
+    return selected
+
+
+def _build_interaction_surface(
+    rows: list[dict[str, Any]],
+    *,
+    param_x: str,
+    param_y: str,
+    critical_baf_threshold: float,
+) -> dict[str, Any] | None:
+    filtered = [
+        row
+        for row in rows
+        if isinstance(row.get(param_x), (int, float))
+        and not isinstance(row.get(param_x), bool)
+        and isinstance(row.get(param_y), (int, float))
+        and not isinstance(row.get(param_y), bool)
+    ]
+    if not filtered:
+        return None
+
+    x_values = sorted({float(row.get(param_x, 0.0)) for row in filtered})
+    y_values = sorted({float(row.get(param_y, 0.0)) for row in filtered})
+    if len(x_values) < 2 or len(y_values) < 2:
+        return None
+
+    grouped: dict[tuple[float, float], list[dict[str, Any]]] = {}
+    for row in filtered:
+        x = float(row.get(param_x, 0.0))
+        y = float(row.get(param_y, 0.0))
+        grouped.setdefault((x, y), []).append(row)
+
+    mean_baf_grid: list[list[float | None]] = []
+    catastrophic_grid: list[list[float | None]] = []
+    covered_cells = 0
+    for y in y_values:
+        baf_row: list[float | None] = []
+        crit_row: list[float | None] = []
+        for x in x_values:
+            cell_rows = grouped.get((x, y), [])
+            if not cell_rows:
+                baf_row.append(None)
+                crit_row.append(None)
+                continue
+            covered_cells += 1
+            baf_values = [float(item.get("baf", 0.0)) for item in cell_rows]
+            baf_mean = float(mean(baf_values)) if baf_values else 0.0
+            catastrophic_probability = (
+                float(sum(value >= critical_baf_threshold for value in baf_values) / len(baf_values))
+                if baf_values
+                else 0.0
+            )
+            baf_row.append(baf_mean)
+            crit_row.append(catastrophic_probability)
+        mean_baf_grid.append(baf_row)
+        catastrophic_grid.append(crit_row)
+
+    if covered_cells < 4:
+        return None
+
+    x_lo, x_hi = x_values[0], x_values[-1]
+    y_lo, y_hi = y_values[0], y_values[-1]
+
+    corners = {
+        "f00": grouped.get((x_lo, y_lo), []),
+        "f10": grouped.get((x_hi, y_lo), []),
+        "f01": grouped.get((x_lo, y_hi), []),
+        "f11": grouped.get((x_hi, y_hi), []),
+    }
+    interaction_score_baf = 0.0
+    if all(corners.values()):
+        corner_means = {
+            key: float(mean(float(item.get("baf", 0.0)) for item in values))
+            for key, values in corners.items()
+        }
+        interaction_score_baf = abs((corner_means["f11"] - corner_means["f10"]) - (corner_means["f01"] - corner_means["f00"]))
+
+    coverage = float(covered_cells / (len(x_values) * len(y_values)))
+    return {
+        "param_x": param_x,
+        "param_y": param_y,
+        "x_values": x_values,
+        "y_values": y_values,
+        "mean_baf_grid": mean_baf_grid,
+        "catastrophic_grid": catastrophic_grid,
+        "cell_coverage": coverage,
+        "cells_total": len(x_values) * len(y_values),
+        "cells_observed": covered_cells,
+        "interaction_score_baf": float(interaction_score_baf),
+    }
+
+
 def analyze_results(
     rows: list[dict[str, Any]],
     *,
@@ -504,6 +611,26 @@ def analyze_results(
         metric_keys,
         top_n=correlation_top_n,
     )
+    interaction_surfaces: list[dict[str, Any]] = []
+    top_baf_params = _select_top_baf_params(continuous_param_correlations, top_k=2)
+    if len(top_baf_params) == 2:
+        surface = _build_interaction_surface(
+            working_rows,
+            param_x=top_baf_params[0],
+            param_y=top_baf_params[1],
+            critical_baf_threshold=critical_baf_threshold,
+        )
+        if surface is not None:
+            interaction_surfaces.append(surface)
+    overall["interaction_surfaces_count"] = len(interaction_surfaces)
+    if interaction_surfaces:
+        primary_surface = interaction_surfaces[0]
+        overall["interaction_surface_primary_pair"] = (
+            f"{primary_surface['param_x']} x {primary_surface['param_y']}"
+        )
+        overall["interaction_surface_primary_coverage"] = float(primary_surface["cell_coverage"])
+        overall["interaction_surface_primary_score_baf"] = float(primary_surface["interaction_score_baf"])
+
     correlations_by_scenario: dict[str, list[tuple[str, str, float, float, float]]] = {}
     correlations_by_scenario_diagnostics: dict[str, dict[str, Any]] = {}
     for scenario_name, scenario_rows in by_scenario.items():
@@ -598,6 +725,7 @@ def analyze_results(
         correlations_by_family=correlations_by_family,
         correlations_by_family_diagnostics=correlations_by_family_diagnostics,
         scenario_pairwise_significance=pairwise_significance,
+        interaction_surfaces=interaction_surfaces,
     )
 
 
@@ -731,7 +859,12 @@ def _parse_ofat_scenario_name(name: str) -> tuple[str, str, float] | None:
     return base_name, param_name, value
 
 
-def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
+def _save_plots(
+    rows: list[dict[str, Any]],
+    figures_dir: Path,
+    *,
+    interaction_surfaces: list[dict[str, Any]] | None = None,
+) -> list[Path]:
     figures_dir.mkdir(parents=True, exist_ok=True)
     generated: list[Path] = []
     try:
@@ -905,6 +1038,65 @@ def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
             plt.close(fig)
             generated.append(ofat_curve_path)
 
+    if interaction_surfaces:
+        for surface in interaction_surfaces:
+            x_values = [float(v) for v in surface.get("x_values", [])]
+            y_values = [float(v) for v in surface.get("y_values", [])]
+            mean_baf_grid = surface.get("mean_baf_grid", [])
+            catastrophic_grid = surface.get("catastrophic_grid", [])
+            param_x = str(surface.get("param_x", "param_x")).replace("param_", "")
+            param_y = str(surface.get("param_y", "param_y")).replace("param_", "")
+            if not x_values or not y_values or not mean_baf_grid or not catastrophic_grid:
+                continue
+
+            def _grid_to_array(grid: Any) -> tuple[Any, Any]:
+                import numpy as np
+
+                matrix = np.full((len(y_values), len(x_values)), np.nan, dtype=float)
+                for yi, row_values in enumerate(grid):
+                    for xi, value in enumerate(row_values):
+                        if value is None:
+                            continue
+                        matrix[yi, xi] = float(value)
+                masked = np.ma.masked_invalid(matrix)
+                return matrix, masked
+
+            try:
+                _, baf_masked = _grid_to_array(mean_baf_grid)
+                fig = plt.figure(figsize=(7.0, 5.2))
+                im = plt.imshow(baf_masked, origin="lower", aspect="auto", vmin=0.0, vmax=1.0, cmap="YlOrRd")
+                plt.colorbar(im, label="mean baf")
+                plt.xticks(range(len(x_values)), [f"{v:.3g}" for v in x_values], rotation=30, ha="right")
+                plt.yticks(range(len(y_values)), [f"{v:.3g}" for v in y_values])
+                plt.xlabel(param_x)
+                plt.ylabel(param_y)
+                plt.title(f"2D interaction surface: mean BAF ({param_x} × {param_y})")
+                baf_path = figures_dir / f"interaction_mean_baf_{param_x}_x_{param_y}.png"
+                fig.tight_layout()
+                fig.savefig(baf_path)
+                plt.close(fig)
+                generated.append(baf_path)
+            except Exception:
+                pass
+
+            try:
+                _, crit_masked = _grid_to_array(catastrophic_grid)
+                fig = plt.figure(figsize=(7.0, 5.2))
+                im = plt.imshow(crit_masked, origin="lower", aspect="auto", vmin=0.0, vmax=1.0, cmap="magma")
+                plt.colorbar(im, label="catastrophic probability")
+                plt.xticks(range(len(x_values)), [f"{v:.3g}" for v in x_values], rotation=30, ha="right")
+                plt.yticks(range(len(y_values)), [f"{v:.3g}" for v in y_values])
+                plt.xlabel(param_x)
+                plt.ylabel(param_y)
+                plt.title(f"2D interaction surface: catastrophic probability ({param_x} × {param_y})")
+                crit_path = figures_dir / f"interaction_catastrophic_{param_x}_x_{param_y}.png"
+                fig.tight_layout()
+                fig.savefig(crit_path)
+                plt.close(fig)
+                generated.append(crit_path)
+            except Exception:
+                pass
+
     return generated
 
 
@@ -917,7 +1109,7 @@ def generate_report(
 ) -> tuple[Path, Path, list[Path]]:
     output_dir = Path(reports_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    figures = _save_plots(rows, output_dir / "figures")
+    figures = _save_plots(rows, output_dir / "figures", interaction_surfaces=summary.interaction_surfaces)
 
     top_worst = summary.scenario_ranking[:3]
     ranking_metric = str(summary.overall.get("scenario_ranking_metric", "auc_normalized_mean"))
@@ -1255,6 +1447,32 @@ def generate_report(
                 )
             )
 
+    if summary.interaction_surfaces:
+        md_lines.append("")
+        md_lines.append("## 2D sensitivity (interaction surface)")
+        md_lines.append(
+            "- Built from two most influential continuous params for `baf` (by |r| in global correlations)."
+        )
+        for surface in summary.interaction_surfaces:
+            score = float(surface.get("interaction_score_baf", 0.0))
+            if score >= 0.20:
+                level = "strong"
+            elif score >= 0.08:
+                level = "moderate"
+            else:
+                level = "weak"
+            md_lines.append(
+                "- Pair "
+                f"{surface.get('param_x', 'param_x')} × {surface.get('param_y', 'param_y')}: "
+                f"coverage={float(surface.get('cell_coverage', 0.0)):.4f} "
+                f"({int(surface.get('cells_observed', 0))}/{int(surface.get('cells_total', 0))} cells), "
+                f"interaction_score_baf={score:.4f} ({level})."
+            )
+            md_lines.append(
+                "- OFAT comparison hint: if OFAT curves looked near-linear but interaction_score is moderate/strong, "
+                "this suggests non-additive effects between the two parameters."
+            )
+
     if figures:
         md_lines.append("")
         md_lines.append("## Figures")
@@ -1271,10 +1489,18 @@ def generate_report(
             ),
             "scenario_baf_mean_iqr": "Scenario mean BAF with interquartile range as asymmetric error bars.",
             "scenario_baf_mean_ofat_curves": "OFAT sensitivity curves: mean BAF vs varied parameter value by base scenario.",
+            "interaction_mean_baf": "2D interaction heatmap of mean BAF for top influential parameter pair.",
+            "interaction_catastrophic": "2D interaction heatmap of catastrophic probability for top influential parameter pair.",
         }
         for fig_path in figures:
             rel = fig_path.relative_to(output_dir)
-            note = figure_notes.get(fig_path.stem, "")
+            stem = fig_path.stem
+            note = figure_notes.get(stem, "")
+            if not note:
+                for prefix, text in figure_notes.items():
+                    if stem.startswith(prefix):
+                        note = text
+                        break
             if note:
                 md_lines.append(f"- {fig_path.stem}: {note}")
             md_lines.append(f"![{fig_path.stem}]({rel.as_posix()})")
@@ -1550,6 +1776,34 @@ def generate_report(
                 )
             )
 
+    if summary.interaction_surfaces:
+        html_lines.append("<h2>2D sensitivity (interaction surface)</h2>")
+        html_lines.append(
+            "<p>Built from two most influential continuous params for <code>baf</code> "
+            "(by absolute global correlation).</p>"
+        )
+        html_lines.append("<ul>")
+        for surface in summary.interaction_surfaces:
+            score = float(surface.get("interaction_score_baf", 0.0))
+            if score >= 0.20:
+                level = "strong"
+            elif score >= 0.08:
+                level = "moderate"
+            else:
+                level = "weak"
+            html_lines.append(
+                "<li>Pair "
+                f"{surface.get('param_x', 'param_x')} × {surface.get('param_y', 'param_y')}: "
+                f"coverage={float(surface.get('cell_coverage', 0.0)):.4f} "
+                f"({int(surface.get('cells_observed', 0))}/{int(surface.get('cells_total', 0))} cells), "
+                f"interaction_score_baf={score:.4f} ({level}).</li>"
+            )
+        html_lines.append("</ul>")
+        html_lines.append(
+            "<p>OFAT comparison hint: if OFAT curves look near-linear but interaction score is moderate/strong, "
+            "this indicates non-additive interaction effects.</p>"
+        )
+
     if figures:
         html_lines.append("<h2>Figures</h2>")
         figure_notes = {
@@ -1562,10 +1816,18 @@ def generate_report(
             ),
             "scenario_baf_mean_iqr": "Scenario mean BAF with interquartile range as asymmetric error bars.",
             "scenario_baf_mean_ofat_curves": "OFAT sensitivity curves: mean BAF vs varied parameter value by base scenario.",
+            "interaction_mean_baf": "2D interaction heatmap of mean BAF for top influential parameter pair.",
+            "interaction_catastrophic": "2D interaction heatmap of catastrophic probability for top influential parameter pair.",
         }
         for fig_path in figures:
             rel = fig_path.relative_to(output_dir)
-            note = figure_notes.get(fig_path.stem, "")
+            stem = fig_path.stem
+            note = figure_notes.get(stem, "")
+            if not note:
+                for prefix, text in figure_notes.items():
+                    if stem.startswith(prefix):
+                        note = text
+                        break
             caption = f"<figcaption>{note}</figcaption>" if note else ""
             html_lines.append(
                 f"<figure><img src='{rel.as_posix()}' alt='{fig_path.stem}' width='760'>{caption}</figure>"

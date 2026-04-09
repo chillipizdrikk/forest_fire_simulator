@@ -119,6 +119,10 @@ Outputs:
 - Figures: `reports/figures/*.png`
 - Auto-report: `reports/summary.md` and `reports/summary.html`
 
+Для sensitivity-ранів у звіт також можуть додаватися 2D interaction heatmaps:
+- `interaction_mean_baf_<param_x>_x_<param_y>.png`
+- `interaction_catastrophic_<param_x>_x_<param_y>.png`
+
 Result schema includes:
 
 - `run_id`, `scenario`, `seed`

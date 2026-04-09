@@ -88,42 +88,6 @@ def _scenario_snapshot(summary: Any, scenario_name: str) -> dict[str, float]:
     }
 
 
-def _flatten_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    flattened_rows: list[dict[str, Any]] = []
-    for item in results:
-        row = {"run_id": item["run_id"], "scenario": item["scenario"], "seed": item["seed"]}
-        row.update({f"param_{k}": v for k, v in item["params"].items()})
-        row.update(item["metrics"])
-        flattened_rows.append(row)
-    return flattened_rows
-
-
-def _group_results_by_scenario(results: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for item in results:
-        grouped.setdefault(str(item["scenario"]), []).append(item)
-    return grouped
-
-
-def _collect_problematic_scenarios(summary: Any, target_share: float) -> list[str]:
-    return sorted(
-        [
-            scenario_name
-            for scenario_name, stats in summary.by_scenario.items()
-            if float(stats.get("censored_share", 0.0)) >= float(target_share)
-        ]
-    )
-
-
-def _scenario_snapshot(summary: Any, scenario_name: str) -> dict[str, float]:
-    stats = summary.by_scenario.get(scenario_name, {})
-    return {
-        "censored_share": float(stats.get("censored_share", 0.0)),
-        "baf_mean_all": float(stats.get("baf_mean_all", 0.0)),
-        "auc_normalized_mean_all": float(stats.get("auc_normalized_mean_all", 0.0)),
-    }
-
-
 def main() -> None:
     from src.app.experiments.runner import ExperimentResult, persist_results, results_to_dicts, run_experiments as run_batch
 
