@@ -278,3 +278,74 @@ def test_parse_ofat_scenario_name_with_nested_underscores(
     # Convention: only humidity uses percent-encoding (_025 -> 0.25), while
     # wind_strength and temperature_c parse the token as a direct number.
     assert _parse_ofat_scenario_name(name) == expected
+
+
+def test_bool_params_are_excluded_from_continuous_correlations() -> None:
+    rows = [
+        {
+            "scenario": "s1",
+            "baf": 0.1,
+            "peak_fire_size": 1.0,
+            "fire_duration": 10.0,
+            "max_spread_rate": 0.5,
+            "time_to_extinguish": 20.0,
+            "auc_normalized": 0.1,
+            "auc": 1.0,
+            "peak_fire_fraction": 0.1,
+            "critical": False,
+            "truncated_by_max_steps": False,
+            "param_temperature_c": 10.0,
+            "param_use_barrier": False,
+        },
+        {
+            "scenario": "s1",
+            "baf": 0.2,
+            "peak_fire_size": 2.0,
+            "fire_duration": 11.0,
+            "max_spread_rate": 0.7,
+            "time_to_extinguish": 22.0,
+            "auc_normalized": 0.2,
+            "auc": 2.0,
+            "peak_fire_fraction": 0.2,
+            "critical": False,
+            "truncated_by_max_steps": False,
+            "param_temperature_c": 20.0,
+            "param_use_barrier": False,
+        },
+        {
+            "scenario": "s2",
+            "baf": 0.8,
+            "peak_fire_size": 8.0,
+            "fire_duration": 20.0,
+            "max_spread_rate": 2.5,
+            "time_to_extinguish": 40.0,
+            "auc_normalized": 0.8,
+            "auc": 8.0,
+            "peak_fire_fraction": 0.8,
+            "critical": True,
+            "truncated_by_max_steps": False,
+            "param_temperature_c": 30.0,
+            "param_use_barrier": True,
+        },
+        {
+            "scenario": "s2",
+            "baf": 0.9,
+            "peak_fire_size": 9.0,
+            "fire_duration": 21.0,
+            "max_spread_rate": 2.7,
+            "time_to_extinguish": 42.0,
+            "auc_normalized": 0.9,
+            "auc": 9.0,
+            "peak_fire_fraction": 0.9,
+            "critical": True,
+            "truncated_by_max_steps": False,
+            "param_temperature_c": 40.0,
+            "param_use_barrier": True,
+        },
+    ]
+
+    summary = analyze_results(rows, correlation_top_n=20)
+
+    assert summary.continuous_param_correlations
+    assert all(pkey != "param_use_barrier" for pkey, *_ in summary.continuous_param_correlations)
+    assert any(pkey == "param_use_barrier" for pkey, *_ in summary.binary_param_effects)

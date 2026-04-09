@@ -13,6 +13,9 @@ class AnalysisSummary:
     overall: dict[str, Any]
     by_scenario: dict[str, dict[str, Any]]
     scenario_ranking: list[tuple[str, float]]
+    continuous_param_correlations: list[tuple[str, str, float, float, float]]
+    continuous_param_correlations_controlled: list[tuple[str, str, float, float, float]]
+    binary_param_effects: list[tuple[str, str, float, float, float, float]]
     correlations: list[tuple[str, str, float, float, float]]
     controlled_correlations: list[tuple[str, str, float, float, float]]
     correlations_by_scenario: dict[str, list[tuple[str, str, float, float, float]]]
@@ -332,33 +335,51 @@ def analyze_results(
         reverse=True,
     )
 
-    numeric_param_keys = sorted({key for row in rows for key in row if key.startswith("param_") and isinstance(row[key], (int, float))})
+    continuous_param_keys = sorted(
+        {
+            key
+            for row in rows
+            for key in row
+            if key.startswith("param_")
+            and isinstance(row[key], (int, float))
+            and not isinstance(row[key], bool)
+        }
+    )
+    binary_param_keys = sorted(
+        {key for row in rows for key in row if key.startswith("param_") and isinstance(row[key], bool)}
+    )
     metric_keys = ["baf", "peak_fire_size", "fire_duration", "max_spread_rate", "time_to_extinguish"]
-    correlations = _collect_top_correlations(rows, numeric_param_keys, metric_keys, top_n=correlation_top_n)
-    controlled_correlations = _collect_controlled_top_correlations(
+    continuous_param_correlations = _collect_top_correlations(
         rows,
-        by_scenario,
-        numeric_param_keys,
+        continuous_param_keys,
         metric_keys,
         top_n=correlation_top_n,
     )
+    continuous_param_correlations_controlled = _collect_controlled_top_correlations(
+        rows,
+        by_scenario,
+        continuous_param_keys,
+        metric_keys,
+        top_n=correlation_top_n,
+    )
+    binary_param_effects = _collect_binary_param_effects(rows, binary_param_keys, metric_keys, top_n=correlation_top_n)
     correlations_by_scenario: dict[str, list[tuple[str, str, float, float, float]]] = {}
     correlations_by_scenario_diagnostics: dict[str, dict[str, Any]] = {}
     for scenario_name, scenario_rows in by_scenario.items():
-        non_constant_params = _count_non_constant_params(scenario_rows, numeric_param_keys)
-        constant_params = [pkey for pkey in numeric_param_keys if pkey not in non_constant_params]
+        non_constant_params = _count_non_constant_params(scenario_rows, continuous_param_keys)
+        constant_params = [pkey for pkey in continuous_param_keys if pkey not in non_constant_params]
         correlations_by_scenario_diagnostics[scenario_name] = {
             "runs": len(scenario_rows),
             "min_runs_required": scenario_correlation_min_runs,
             "non_constant_param_count": len(non_constant_params),
-            "total_param_count": len(numeric_param_keys),
+            "total_param_count": len(continuous_param_keys),
             "constant_param_keys": constant_params,
         }
         if len(scenario_rows) < scenario_correlation_min_runs:
             continue
         correlations_by_scenario[scenario_name] = _collect_top_correlations(
             scenario_rows,
-            numeric_param_keys,
+            continuous_param_keys,
             metric_keys,
             top_n=correlation_top_n,
         )
@@ -426,8 +447,11 @@ def analyze_results(
         overall=overall,
         by_scenario=scenario_stats,
         scenario_ranking=ranking,
-        correlations=correlations,
-        controlled_correlations=controlled_correlations,
+        continuous_param_correlations=continuous_param_correlations,
+        continuous_param_correlations_controlled=continuous_param_correlations_controlled,
+        binary_param_effects=binary_param_effects,
+        correlations=continuous_param_correlations,
+        controlled_correlations=continuous_param_correlations_controlled,
         correlations_by_scenario=correlations_by_scenario,
         correlations_by_scenario_diagnostics=correlations_by_scenario_diagnostics,
         correlations_by_family=correlations_by_family,
@@ -510,6 +534,38 @@ def _collect_controlled_top_correlations(
 
     correlations.sort(key=lambda item: abs(item[2]), reverse=True)
     return correlations[:top_n]
+
+
+def _collect_binary_param_effects(
+    rows: list[dict[str, Any]],
+    binary_param_keys: list[str],
+    metric_keys: list[str],
+    *,
+    top_n: int,
+) -> list[tuple[str, str, float, float, float, float]]:
+    effects: list[tuple[str, str, float, float, float, float]] = []
+    for pkey in binary_param_keys:
+        bool_rows = [row for row in rows if isinstance(row.get(pkey), bool)]
+        if not bool_rows:
+            continue
+        px = [1.0 if bool(row.get(pkey, False)) else 0.0 for row in bool_rows]
+        if len(set(px)) < 2:
+            continue
+        for mkey in metric_keys:
+            my = [float(row.get(mkey, 0.0)) for row in bool_rows]
+            true_values = [y for x, y in zip(px, my) if x == 1.0]
+            false_values = [y for x, y in zip(px, my) if x == 0.0]
+            if not true_values or not false_values:
+                continue
+            mean_diff = float(mean(true_values) - mean(false_values))
+            point_biserial = _pearson_corr(px, my)
+            if point_biserial is None:
+                continue
+            ci_low, ci_high = _bootstrap_corr_ci(px, my, confidence=0.95, n_resamples=1000)
+            effects.append((pkey, mkey, mean_diff, point_biserial, ci_low, ci_high))
+
+    effects.sort(key=lambda item: abs(item[3]), reverse=True)
+    return effects[:top_n]
 
 
 def _parse_ofat_scenario_name(name: str) -> tuple[str, str, float] | None:
@@ -779,8 +835,9 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         key=lambda item: item[1],
         reverse=True,
     )[:3]
-    top_corr_uncontrolled = summary.correlations[:5]
-    top_corr_controlled = summary.controlled_correlations[:5]
+    top_continuous_corr_uncontrolled = summary.continuous_param_correlations[:5]
+    top_continuous_corr_controlled = summary.continuous_param_correlations_controlled[:5]
+    top_binary_effects = summary.binary_param_effects[:5]
     sorted_scenario_names = sorted(summary.by_scenario.keys())
     sorted_family_names = sorted(summary.correlations_by_family_diagnostics.keys())
     elevated_censoring = [
@@ -895,15 +952,23 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         md_lines.append(f"- {name}: {score:.4f}")
 
     md_lines.append("")
-    md_lines.append("## Top parameter-metric correlations (uncontrolled)")
-    md_lines.append("- Note: these are global correlations without controlling for scenario.")
-    for pkey, mkey, corr, ci_low, ci_high in top_corr_uncontrolled:
+    md_lines.append("## continuous_param_correlations (uncontrolled)")
+    md_lines.append("- Note: these are global Pearson correlations for continuous params only.")
+    for pkey, mkey, corr, ci_low, ci_high in top_continuous_corr_uncontrolled:
         md_lines.append(f"- {pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}")
     md_lines.append("")
-    md_lines.append("## Top parameter-metric correlations (controlled by scenario)")
+    md_lines.append("## continuous_param_correlations (controlled by scenario)")
     md_lines.append("- Method: within-scenario demeaning (scenario fixed-effects style).")
-    for pkey, mkey, corr, ci_low, ci_high in top_corr_controlled:
+    for pkey, mkey, corr, ci_low, ci_high in top_continuous_corr_controlled:
         md_lines.append(f"- {pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}")
+    md_lines.append("")
+    md_lines.append("## binary_param_effects")
+    md_lines.append("- For binary params: mean(True)-mean(False), plus point-biserial correlation with 95% CI.")
+    for pkey, mkey, mean_diff, corr, ci_low, ci_high in top_binary_effects:
+        md_lines.append(
+            f"- {pkey} vs {mkey}: mean_diff={mean_diff:.4f}, point_biserial_r={corr:.4f}, "
+            f"95% CI {ci_low:.4f}..{ci_high:.4f}"
+        )
     md_lines.append("")
     md_lines.append("## Scenario-local top parameter-metric correlations")
     for scenario_name in sorted_scenario_names:
@@ -1103,15 +1168,25 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     html_lines.append(f"</ol><h3>{ranking_metric_label}</h3><ol>")
     for name, score in top_worst:
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
-    html_lines.append("</ol><h2>Top parameter-metric correlations (uncontrolled)</h2>")
-    html_lines.append("<p>Note: these are global correlations without controlling for scenario.</p><ul>")
-    for pkey, mkey, corr, ci_low, ci_high in top_corr_uncontrolled:
+    html_lines.append("</ol><h2>continuous_param_correlations (uncontrolled)</h2>")
+    html_lines.append("<p>Note: these are global Pearson correlations for continuous params only.</p><ul>")
+    for pkey, mkey, corr, ci_low, ci_high in top_continuous_corr_uncontrolled:
         html_lines.append(f"<li>{pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}</li>")
     html_lines.append("</ul>")
-    html_lines.append("<h2>Top parameter-metric correlations (controlled by scenario)</h2>")
+    html_lines.append("<h2>continuous_param_correlations (controlled by scenario)</h2>")
     html_lines.append("<p>Method: within-scenario demeaning (scenario fixed-effects style).</p><ul>")
-    for pkey, mkey, corr, ci_low, ci_high in top_corr_controlled:
+    for pkey, mkey, corr, ci_low, ci_high in top_continuous_corr_controlled:
         html_lines.append(f"<li>{pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}</li>")
+    html_lines.append("</ul>")
+    html_lines.append("<h2>binary_param_effects</h2>")
+    html_lines.append(
+        "<p>For binary params: mean(True)-mean(False), plus point-biserial correlation with 95% CI.</p><ul>"
+    )
+    for pkey, mkey, mean_diff, corr, ci_low, ci_high in top_binary_effects:
+        html_lines.append(
+            f"<li>{pkey} vs {mkey}: mean_diff={mean_diff:.4f}, "
+            f"point_biserial_r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}</li>"
+        )
     html_lines.append("</ul>")
     html_lines.append("<h2>Scenario-local top parameter-metric correlations</h2>")
     for scenario_name in sorted_scenario_names:
