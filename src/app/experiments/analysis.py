@@ -495,26 +495,24 @@ def _collect_controlled_top_correlations(
 
 
 def _parse_ofat_scenario_name(name: str) -> tuple[str, str, float] | None:
-    """Parse OFAT scenario names like '<base>_<param>_<value_token>'."""
-    value_match = re.search(r"_(\d+)$", name)
-    if not value_match:
+    """Parse OFAT names '<base>_<param>_<value_token>' with humidity encoded as percent."""
+    match = re.fullmatch(
+        r"(?P<base>.+)_(?P<param>humidity|wind_strength|temperature_c)_(?P<value_token>\d+)",
+        name,
+    )
+    if match is None:
         return None
 
-    value_token = value_match.group(1)
-    prefix = name[: -len(value_token) - 1]
-    for param_name in ("humidity", "wind_strength", "temperature_c"):
-        marker = f"_{param_name}_"
-        if marker not in name:
-            continue
-        base_name = prefix[: -len(param_name) - 1]
-        if not base_name:
-            return None
-        try:
-            value = float(value_token) / 100.0 if param_name == "humidity" else float(value_token)
-        except ValueError:
-            return None
-        return base_name, param_name, value
-    return None
+    base_name = match.group("base")
+    param_name = match.group("param")
+    value_token = match.group("value_token")
+    try:
+        numeric_value = float(value_token)
+    except ValueError:
+        return None
+
+    value = numeric_value / 100.0 if param_name == "humidity" else numeric_value
+    return base_name, param_name, value
 
 
 def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:

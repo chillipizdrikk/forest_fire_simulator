@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.app.experiments.analysis import analyze_results
+from src.app.experiments.analysis import _parse_ofat_scenario_name, analyze_results
 
 
 def test_analysis_includes_all_uncensored_and_quantiles() -> None:
@@ -151,3 +151,29 @@ def test_analysis_includes_family_level_sensitivity_for_ofat_variants() -> None:
     assert humidity_baf
     assert humidity_baf[0][2] < 0.0
     assert humidity_baf[0][5] < 0.0
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        (
+            "anchor_mid_windy_rain_humidity_025",
+            ("anchor_mid_windy_rain", "humidity", 0.25),
+        ),
+        (
+            "transition_low_humidity_temperature_c_20",
+            ("transition_low_humidity", "temperature_c", 20.0),
+        ),
+        (
+            "transition_low_humidity_wind_strength_08",
+            ("transition_low_humidity", "wind_strength", 8.0),
+        ),
+    ],
+)
+def test_parse_ofat_scenario_name_with_nested_underscores(
+    name: str,
+    expected: tuple[str, str, float],
+) -> None:
+    # Convention: only humidity uses percent-encoding (_025 -> 0.25), while
+    # wind_strength and temperature_c parse the token as a direct number.
+    assert _parse_ofat_scenario_name(name) == expected
