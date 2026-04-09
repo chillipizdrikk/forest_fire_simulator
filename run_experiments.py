@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 from typing import Any
 
 from src.app.experiments.analysis import analyze_results, generate_report
-from src.app.experiments.runner import ExperimentResult, persist_results, results_to_dicts, run_experiments
 from src.app.experiments.scenarios import load_scenarios
 
 
-def parse_args() -> argparse.Namespace:
+def _sanitize_cli_argv(argv: list[str]) -> list[str]:
+    # Users sometimes copy bash-style line continuations "\" into PowerShell,
+    # where "\" is passed as a literal argument and breaks argparse.
+    return [arg for arg in argv if arg.strip() not in {"\\", "\\n", "\\r\\n"}]
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Batch experiments for forest fire simulator")
     parser.add_argument("--scenarios", default="scenarios.yaml", help="Path to scenarios.yaml")
     parser.add_argument("--n", type=int, default=100, help="Runs per scenario")
@@ -41,7 +47,45 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--results-dir", default="results/raw", help="Directory for CSV/Parquet outputs")
     parser.add_argument("--reports-dir", default="reports", help="Directory for markdown/html reports")
-    return parser.parse_args()
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    sanitized = _sanitize_cli_argv(raw_argv)
+    return parser.parse_args(sanitized)
+
+
+def _flatten_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    flattened_rows: list[dict[str, Any]] = []
+    for item in results:
+        row = {"run_id": item["run_id"], "scenario": item["scenario"], "seed": item["seed"]}
+        row.update({f"param_{k}": v for k, v in item["params"].items()})
+        row.update(item["metrics"])
+        flattened_rows.append(row)
+    return flattened_rows
+
+
+def _group_results_by_scenario(results: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for item in results:
+        grouped.setdefault(str(item["scenario"]), []).append(item)
+    return grouped
+
+
+def _collect_problematic_scenarios(summary: Any, target_share: float) -> list[str]:
+    return sorted(
+        [
+            scenario_name
+            for scenario_name, stats in summary.by_scenario.items()
+            if float(stats.get("censored_share", 0.0)) >= float(target_share)
+        ]
+    )
+
+
+def _scenario_snapshot(summary: Any, scenario_name: str) -> dict[str, float]:
+    stats = summary.by_scenario.get(scenario_name, {})
+    return {
+        "censored_share": float(stats.get("censored_share", 0.0)),
+        "baf_mean_all": float(stats.get("baf_mean_all", 0.0)),
+        "auc_normalized_mean_all": float(stats.get("auc_normalized_mean_all", 0.0)),
+    }
 
 
 def _flatten_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -81,6 +125,8 @@ def _scenario_snapshot(summary: Any, scenario_name: str) -> dict[str, float]:
 
 
 def main() -> None:
+    from src.app.experiments.runner import ExperimentResult, persist_results, results_to_dicts, run_experiments as run_batch
+
     args = parse_args()
 
     scenarios_path = Path(args.scenarios)
@@ -89,7 +135,7 @@ def main() -> None:
         args.n = 100
 
     defaults, scenarios = load_scenarios(args.scenarios)
-    results = run_experiments(
+    results = run_batch(
         defaults=defaults,
         scenarios=scenarios,
         runs_per_scenario=args.n,
@@ -116,7 +162,7 @@ def main() -> None:
 
             next_max_steps = max(current_max_steps + 1, int(current_max_steps * float(args.censor_step_multiplier)))
             rerun_scenarios = [scenario_defs[name] for name in problematic if name in scenario_defs]
-            rerun_results = run_experiments(
+            rerun_results = run_batch(
                 defaults=defaults,
                 scenarios=rerun_scenarios,
                 runs_per_scenario=args.n,

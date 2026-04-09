@@ -57,6 +57,17 @@ python run_experiments.py \
   --censor-step-multiplier 1.6
 ```
 
+PowerShell (multiline, використовуйте бектик `` ` `` замість `\`):
+
+```powershell
+python run_experiments.py `
+  --n 100 `
+  --max-steps 500 `
+  --censor-target-share 0.02 `
+  --censor-max-retries 2 `
+  --censor-step-multiplier 1.6
+```
+
 Щоб вимкнути аудит:
 
 ```bash
