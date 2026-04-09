@@ -207,8 +207,10 @@ def analyze_results(
     correlation_top_n: int = 10,
     scenario_correlation_min_runs: int = 5,
 ) -> AnalysisSummary:
-    uncensored_all = _uncensored_rows(rows)
-    global_tte_rows = uncensored_all if uncensored_all else rows
+    working_rows = [dict(row) for row in rows]
+
+    uncensored_all = _uncensored_rows(working_rows)
+    global_tte_rows = uncensored_all if uncensored_all else working_rows
     global_tte_values = [float(row.get("time_to_extinguish", 0.0)) for row in global_tte_rows]
     global_tte_norm = _normalize_01(global_tte_values)
     global_tte_norm_by_run_id = {
@@ -216,16 +218,16 @@ def analyze_results(
     }
 
     by_scenario: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
+    for row in working_rows:
         by_scenario.setdefault(str(row["scenario"]), []).append(row)
 
-    baf_values = [float(row.get("baf", 0.0)) for row in rows]
-    censored_runs_count = int(sum(bool(row.get("truncated_by_max_steps", False)) for row in rows))
-    censored_runs_share = float(censored_runs_count / len(rows)) if rows else 0.0
+    baf_values = [float(row.get("baf", 0.0)) for row in working_rows]
+    censored_runs_count = int(sum(bool(row.get("truncated_by_max_steps", False)) for row in working_rows))
+    censored_runs_share = float(censored_runs_count / len(working_rows)) if working_rows else 0.0
     tte_min = min(global_tte_values) if global_tte_values else 0.0
     tte_max = max(global_tte_values) if global_tte_values else 0.0
     tte_span = tte_max - tte_min
-    for row in rows:
+    for row in working_rows:
         run_id = str(row.get("run_id", ""))
         if run_id in global_tte_norm_by_run_id:
             row["time_to_extinguish_global_norm"] = float(global_tte_norm_by_run_id[run_id])
@@ -236,17 +238,17 @@ def analyze_results(
         tte_value = float(row.get("time_to_extinguish", 0.0))
         row["time_to_extinguish_global_norm"] = _clamp_01((tte_value - tte_min) / tte_span)
     overall = {
-        "runs_total": len(rows),
+        "runs_total": len(working_rows),
         "baf_mean": float(mean(baf_values)) if baf_values else 0.0,
         "baf_mean_all": float(mean(baf_values)) if baf_values else 0.0,
         "baf_mean_uncensored": _mean_metric(uncensored_all, "baf"),
-        "auc_normalized_mean": _mean_metric(rows, "auc_normalized"),
-        "auc_normalized_mean_all": _mean_metric(rows, "auc_normalized"),
+        "auc_normalized_mean": _mean_metric(working_rows, "auc_normalized"),
+        "auc_normalized_mean_all": _mean_metric(working_rows, "auc_normalized"),
         "auc_normalized_mean_uncensored": _mean_metric(uncensored_all, "auc_normalized"),
-        "time_to_extinguish_mean": _mean_metric(rows, "time_to_extinguish"),
-        "time_to_extinguish_mean_all": _mean_metric(rows, "time_to_extinguish"),
+        "time_to_extinguish_mean": _mean_metric(working_rows, "time_to_extinguish"),
+        "time_to_extinguish_mean_all": _mean_metric(working_rows, "time_to_extinguish"),
         "time_to_extinguish_mean_uncensored": _mean_metric(uncensored_all, "time_to_extinguish"),
-        "critical_mean_all": _critical_share(rows),
+        "critical_mean_all": _critical_share(working_rows),
         "critical_mean_uncensored": _critical_share(uncensored_all),
         "baf_p95": _percentile(baf_values, 0.95),
         "baf_p75": _percentile(baf_values, 0.75),
@@ -338,7 +340,7 @@ def analyze_results(
     continuous_param_keys = sorted(
         {
             key
-            for row in rows
+            for row in working_rows
             for key in row
             if key.startswith("param_")
             and isinstance(row[key], (int, float))
@@ -346,23 +348,28 @@ def analyze_results(
         }
     )
     binary_param_keys = sorted(
-        {key for row in rows for key in row if key.startswith("param_") and isinstance(row[key], bool)}
+        {key for row in working_rows for key in row if key.startswith("param_") and isinstance(row[key], bool)}
     )
     metric_keys = ["baf", "peak_fire_size", "fire_duration", "max_spread_rate", "time_to_extinguish"]
     continuous_param_correlations = _collect_top_correlations(
-        rows,
+        working_rows,
         continuous_param_keys,
         metric_keys,
         top_n=correlation_top_n,
     )
     continuous_param_correlations_controlled = _collect_controlled_top_correlations(
-        rows,
+        working_rows,
         by_scenario,
         continuous_param_keys,
         metric_keys,
         top_n=correlation_top_n,
     )
-    binary_param_effects = _collect_binary_param_effects(rows, binary_param_keys, metric_keys, top_n=correlation_top_n)
+    binary_param_effects = _collect_binary_param_effects(
+        working_rows,
+        binary_param_keys,
+        metric_keys,
+        top_n=correlation_top_n,
+    )
     correlations_by_scenario: dict[str, list[tuple[str, str, float, float, float]]] = {}
     correlations_by_scenario_diagnostics: dict[str, dict[str, Any]] = {}
     for scenario_name, scenario_rows in by_scenario.items():
@@ -386,7 +393,7 @@ def analyze_results(
 
     family_rows: dict[tuple[str, str], list[dict[str, Any]]] = {}
     non_ofat_family_rows: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
+    for row in working_rows:
         scenario_name = str(row.get("scenario", ""))
         parsed = _parse_ofat_scenario_name(scenario_name)
         if parsed:
