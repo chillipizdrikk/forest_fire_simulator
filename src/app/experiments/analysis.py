@@ -363,25 +363,33 @@ def analyze_results(
             top_n=correlation_top_n,
         )
 
-    family_rows: dict[str, list[dict[str, Any]]] = {}
+    family_rows: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    non_ofat_family_rows: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         scenario_name = str(row.get("scenario", ""))
         parsed = _parse_ofat_scenario_name(scenario_name)
-        family_name = parsed[0] if parsed else scenario_name
-        family_rows.setdefault(family_name, []).append(row)
+        if parsed:
+            base_name, varied_param_name, _ = parsed
+            family_rows.setdefault((base_name, varied_param_name), []).append(row)
+        else:
+            non_ofat_family_rows.setdefault(scenario_name, []).append(row)
 
     family_metric_keys = ["baf", "auc_normalized", "time_to_extinguish"]
     correlations_by_family: dict[str, list[tuple[str, str, float, float, float, float, float, float]]] = {}
     correlations_by_family_diagnostics: dict[str, dict[str, Any]] = {}
-    for family_name, items in family_rows.items():
-        non_constant_params = _count_non_constant_params(items, numeric_param_keys)
-        constant_params = [pkey for pkey in numeric_param_keys if pkey not in non_constant_params]
+    for (base_name, varied_param_name), items in family_rows.items():
+        family_name = f"{base_name} / {varied_param_name}"
+        varied_param_key = f"param_{varied_param_name}"
+        non_constant_params = _count_non_constant_params(items, [varied_param_key])
+        constant_params = [varied_param_key] if not non_constant_params else []
         correlations_by_family_diagnostics[family_name] = {
             "runs": len(items),
             "min_runs_required": scenario_correlation_min_runs,
             "non_constant_param_count": len(non_constant_params),
-            "total_param_count": len(numeric_param_keys),
+            "total_param_count": 1,
             "constant_param_keys": constant_params,
+            "ofat_base_name": base_name,
+            "ofat_varied_param_name": varied_param_name,
         }
         if len(items) < scenario_correlation_min_runs:
             continue
@@ -403,6 +411,16 @@ def analyze_results(
         family_corrs.sort(key=lambda item: abs(item[2]), reverse=True)
         if family_corrs:
             correlations_by_family[family_name] = family_corrs[:correlation_top_n]
+
+    for scenario_name, items in non_ofat_family_rows.items():
+        correlations_by_family_diagnostics[scenario_name] = {
+            "runs": len(items),
+            "min_runs_required": scenario_correlation_min_runs,
+            "non_constant_param_count": 0,
+            "total_param_count": 0,
+            "constant_param_keys": [],
+            "ofat_excluded": True,
+        }
 
     return AnalysisSummary(
         overall=overall,
@@ -923,10 +941,11 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     md_lines.append("")
     md_lines.append("## Family-level parameter sensitivity (OFAT-aware)")
     md_lines.append(
-        "- Grouping rule: OFAT scenarios are grouped by base family (e.g. `<base>_humidity_*` -> `<base>`), "
-        "other scenarios remain as-is."
+        "- Grouping rule: OFAT scenarios are grouped by axis `<base> / <varied_param>` "
+        "(e.g. `transition_low_humidity / humidity`)."
     )
-    md_lines.append("- For each family: Pearson correlation and linear slope with 95% bootstrap CI.")
+    md_lines.append("- Non-OFAT scenarios are excluded from this OFAT sensitivity section.")
+    md_lines.append("- For each OFAT axis: Pearson correlation and linear slope with 95% bootstrap CI.")
     for family_name in sorted_family_names:
         family_corr = summary.correlations_by_family.get(family_name)
         diag = summary.correlations_by_family_diagnostics.get(family_name, {})
@@ -935,6 +954,9 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         total_param_count = int(diag.get("total_param_count", 0))
         min_runs = int(diag.get("min_runs_required", 5))
         md_lines.append(f"### {family_name}")
+        if bool(diag.get("ofat_excluded", False)):
+            md_lines.append("- Excluded: scenario name does not match OFAT naming convention.")
+            continue
         if family_corr:
             for pkey, mkey, corr, corr_ci_low, corr_ci_high, slope, slope_ci_low, slope_ci_high in family_corr[:5]:
                 md_lines.append(
@@ -1129,10 +1151,12 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
 
     html_lines.append("<h2>Family-level parameter sensitivity (OFAT-aware)</h2>")
     html_lines.append(
-        "<p>Grouping rule: OFAT scenarios are grouped by base family (e.g. "
-        "<code>&lt;base&gt;_humidity_*</code> -&gt; <code>&lt;base&gt;</code>), other scenarios remain as-is.</p>"
+        "<p>Grouping rule: OFAT scenarios are grouped by axis "
+        "<code>&lt;base&gt; / &lt;varied_param&gt;</code> "
+        "(e.g. <code>transition_low_humidity / humidity</code>).</p>"
     )
-    html_lines.append("<p>For each family: Pearson correlation and linear slope with 95% bootstrap CI.</p>")
+    html_lines.append("<p>Non-OFAT scenarios are excluded from this OFAT sensitivity section.</p>")
+    html_lines.append("<p>For each OFAT axis: Pearson correlation and linear slope with 95% bootstrap CI.</p>")
     for family_name in sorted_family_names:
         family_corr = summary.correlations_by_family.get(family_name)
         diag = summary.correlations_by_family_diagnostics.get(family_name, {})
@@ -1141,6 +1165,9 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
         total_param_count = int(diag.get("total_param_count", 0))
         min_runs = int(diag.get("min_runs_required", 5))
         html_lines.append(f"<h3>{family_name}</h3>")
+        if bool(diag.get("ofat_excluded", False)):
+            html_lines.append("<p>Excluded: scenario name does not match OFAT naming convention.</p>")
+            continue
         if family_corr:
             html_lines.append("<ul>")
             for pkey, mkey, corr, corr_ci_low, corr_ci_high, slope, slope_ci_low, slope_ci_high in family_corr[:5]:
