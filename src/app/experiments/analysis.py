@@ -908,7 +908,13 @@ def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
     return generated
 
 
-def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, reports_dir: str | Path) -> tuple[Path, Path, list[Path]]:
+def generate_report(
+    rows: list[dict[str, Any]],
+    summary: AnalysisSummary,
+    reports_dir: str | Path,
+    *,
+    censoring_audit: dict[str, Any] | None = None,
+) -> tuple[Path, Path, list[Path]]:
     output_dir = Path(reports_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     figures = _save_plots(rows, output_dir / "figures")
@@ -1049,6 +1055,37 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     ]
     for name, score in top_worst:
         md_lines.append(f"- {name}: {score:.4f}")
+
+    if censoring_audit:
+        md_lines.append("")
+        md_lines.append("## Censoring max_steps bias audit")
+        md_lines.append(
+            "- Target rule: "
+            f"censored_share < {float(censoring_audit.get('target_censored_share', 0.0)):.4f}"
+        )
+        md_lines.append(f"- Initial max_steps: {int(censoring_audit.get('initial_max_steps', 0))}")
+        md_lines.append(f"- Final max_steps: {int(censoring_audit.get('final_max_steps', 0))}")
+        md_lines.append(f"- Stop reason: {str(censoring_audit.get('stop_reason', 'n/a'))}")
+        for round_info in censoring_audit.get("rounds", []):
+            md_lines.append(
+                "### Round "
+                f"{int(round_info.get('round', 0))}: max_steps "
+                f"{int(round_info.get('from_max_steps', 0))} -> {int(round_info.get('to_max_steps', 0))}"
+            )
+            md_lines.append(
+                f"- Re-run scenarios: {', '.join(round_info.get('rerun_scenarios', [])) or 'none'}"
+            )
+            for scenario_delta in round_info.get("scenario_deltas", []):
+                md_lines.append(
+                    "- "
+                    f"{scenario_delta['scenario']}: censored_share "
+                    f"{float(scenario_delta['before_censored_share']):.4f} -> "
+                    f"{float(scenario_delta['after_censored_share']):.4f}; "
+                    f"baf_mean_all {float(scenario_delta['before_baf_mean_all']):.4f} -> "
+                    f"{float(scenario_delta['after_baf_mean_all']):.4f}; "
+                    f"auc_normalized_mean_all {float(scenario_delta['before_auc_normalized_mean_all']):.4f} -> "
+                    f"{float(scenario_delta['after_auc_normalized_mean_all']):.4f}"
+                )
 
     md_lines.append("")
     md_lines.append("## Absolute KPI ranking")
@@ -1302,6 +1339,40 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     for name, score in top_worst:
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
     html_lines.append("</ol>")
+    if censoring_audit:
+        html_lines.append("<h2>Censoring max_steps bias audit</h2><ul>")
+        html_lines.append(
+            "<li>Target rule: censored_share &lt; "
+            f"{float(censoring_audit.get('target_censored_share', 0.0)):.4f}</li>"
+        )
+        html_lines.append(f"<li>Initial max_steps: {int(censoring_audit.get('initial_max_steps', 0))}</li>")
+        html_lines.append(f"<li>Final max_steps: {int(censoring_audit.get('final_max_steps', 0))}</li>")
+        html_lines.append(f"<li>Stop reason: {str(censoring_audit.get('stop_reason', 'n/a'))}</li>")
+        html_lines.append("</ul>")
+        for round_info in censoring_audit.get("rounds", []):
+            html_lines.append(
+                "<h3>Round "
+                f"{int(round_info.get('round', 0))}: max_steps "
+                f"{int(round_info.get('from_max_steps', 0))} -&gt; {int(round_info.get('to_max_steps', 0))}</h3>"
+            )
+            html_lines.append(
+                "<p>Re-run scenarios: "
+                f"{', '.join(round_info.get('rerun_scenarios', [])) or 'none'}</p>"
+            )
+            html_lines.append("<ul>")
+            for scenario_delta in round_info.get("scenario_deltas", []):
+                html_lines.append(
+                    "<li>"
+                    f"{scenario_delta['scenario']}: censored_share "
+                    f"{float(scenario_delta['before_censored_share']):.4f} -&gt; "
+                    f"{float(scenario_delta['after_censored_share']):.4f}; "
+                    f"baf_mean_all {float(scenario_delta['before_baf_mean_all']):.4f} -&gt; "
+                    f"{float(scenario_delta['after_baf_mean_all']):.4f}; "
+                    f"auc_normalized_mean_all {float(scenario_delta['before_auc_normalized_mean_all']):.4f} -&gt; "
+                    f"{float(scenario_delta['after_auc_normalized_mean_all']):.4f}"
+                    "</li>"
+                )
+            html_lines.append("</ul>")
     html_lines.append("<h2>Absolute KPI ranking</h2>")
     html_lines.append("<h3>Mean burned area fraction (absolute, point estimate)</h3><ol>")
     for name, score in top_worst_abs_baf:
