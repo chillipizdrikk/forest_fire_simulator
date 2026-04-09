@@ -1,8 +1,49 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 import pytest
 
 from src.app.experiments.analysis import _parse_ofat_scenario_name, analyze_results
+
+
+def test_analyze_results_does_not_mutate_input_rows() -> None:
+    input_rows = [
+        {
+            "scenario": "s1",
+            "run_id": "run-1",
+            "baf": 0.2,
+            "auc_normalized": 0.3,
+            "time_to_extinguish": 12,
+            "critical": False,
+            "truncated_by_max_steps": False,
+            "peak_fire_size": 1,
+            "auc": 1,
+            "peak_fire_fraction": 0.1,
+            "max_spread_rate": 1.0,
+            "fire_duration": 8,
+        },
+        {
+            "scenario": "s1",
+            "run_id": "run-2",
+            "baf": 0.7,
+            "auc_normalized": 0.8,
+            "time_to_extinguish": 20,
+            "critical": True,
+            "truncated_by_max_steps": True,
+            "peak_fire_size": 2,
+            "auc": 2,
+            "peak_fire_fraction": 0.2,
+            "max_spread_rate": 2.0,
+            "fire_duration": 12,
+        },
+    ]
+    rows_before = deepcopy(input_rows)
+
+    analyze_results(input_rows)
+
+    assert input_rows == rows_before
+    assert all("time_to_extinguish_global_norm" not in row for row in input_rows)
 
 
 def test_analysis_includes_all_uncensored_and_quantiles() -> None:
