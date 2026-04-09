@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import combinations
 from pathlib import Path
 from random import Random
 import re
@@ -22,6 +23,7 @@ class AnalysisSummary:
     correlations_by_scenario_diagnostics: dict[str, dict[str, Any]]
     correlations_by_family: dict[str, list[tuple[str, str, float, float, float, float, float, float]]]
     correlations_by_family_diagnostics: dict[str, dict[str, Any]]
+    scenario_pairwise_significance: dict[str, list[dict[str, Any]]]
 
 
 def _percentile(values: list[float], q: float) -> float:
@@ -199,6 +201,115 @@ def _critical_share(rows: list[dict[str, Any]]) -> float:
     return float(sum(bool(row.get("critical", False)) for row in rows) / len(rows)) if rows else 0.0
 
 
+def _cliffs_delta(xs: list[float], ys: list[float]) -> float:
+    if not xs or not ys:
+        return 0.0
+    greater = 0
+    lower = 0
+    for x in xs:
+        for y in ys:
+            if x > y:
+                greater += 1
+            elif x < y:
+                lower += 1
+    denom = len(xs) * len(ys)
+    if denom == 0:
+        return 0.0
+    return float((greater - lower) / denom)
+
+
+def _cliffs_delta_label(delta: float) -> str:
+    ad = abs(float(delta))
+    if ad < 0.147:
+        return "negligible"
+    if ad < 0.33:
+        return "small"
+    if ad < 0.474:
+        return "medium"
+    return "large"
+
+
+def _permutation_test_mean_diff(
+    xs: list[float],
+    ys: list[float],
+    *,
+    n_resamples: int = 2000,
+    seed: int = 42,
+) -> float:
+    if not xs or not ys:
+        return 1.0
+    observed = float(mean(xs) - mean(ys))
+    combined = [*xs, *ys]
+    n_x = len(xs)
+    rng = Random(seed)
+    extreme = 0
+    for _ in range(max(1, int(n_resamples))):
+        shuffled = list(combined)
+        rng.shuffle(shuffled)
+        perm_x = shuffled[:n_x]
+        perm_y = shuffled[n_x:]
+        perm_diff = float(mean(perm_x) - mean(perm_y))
+        if abs(perm_diff) >= abs(observed):
+            extreme += 1
+    return float((extreme + 1) / (max(1, int(n_resamples)) + 1))
+
+
+def _benjamini_hochberg(p_values: list[float]) -> list[float]:
+    if not p_values:
+        return []
+    m = len(p_values)
+    ordered = sorted(enumerate(p_values), key=lambda item: item[1])
+    adjusted = [1.0] * m
+    running_min = 1.0
+    for rank in range(m, 0, -1):
+        idx, p = ordered[rank - 1]
+        raw = float(p * m / rank)
+        running_min = min(running_min, raw)
+        adjusted[idx] = float(_clamp_01(running_min))
+    return adjusted
+
+
+def _pairwise_significance_by_metric(
+    by_scenario: dict[str, list[dict[str, Any]]],
+    *,
+    metric_key: str,
+    n_resamples: int = 2000,
+    seed: int = 42,
+) -> list[dict[str, Any]]:
+    scenario_names = sorted(by_scenario.keys())
+    rows: list[dict[str, Any]] = []
+    for idx, (name_a, name_b) in enumerate(combinations(scenario_names, 2)):
+        values_a = [float(item.get(metric_key, 0.0)) for item in by_scenario[name_a]]
+        values_b = [float(item.get(metric_key, 0.0)) for item in by_scenario[name_b]]
+        if not values_a or not values_b:
+            continue
+        mean_a = float(mean(values_a))
+        mean_b = float(mean(values_b))
+        p_value = _permutation_test_mean_diff(values_a, values_b, n_resamples=n_resamples, seed=seed + idx)
+        delta = _cliffs_delta(values_a, values_b)
+        rows.append(
+            {
+                "scenario_a": name_a,
+                "scenario_b": name_b,
+                "metric": metric_key,
+                "n_a": len(values_a),
+                "n_b": len(values_b),
+                "mean_a": mean_a,
+                "mean_b": mean_b,
+                "mean_diff": float(mean_a - mean_b),
+                "p_value": p_value,
+                "effect_cliffs_delta": float(delta),
+                "effect_label": _cliffs_delta_label(delta),
+            }
+        )
+    adjusted = _benjamini_hochberg([float(row["p_value"]) for row in rows])
+    for row, p_adj in zip(rows, adjusted):
+        row["p_value_adj"] = float(p_adj)
+        row["significant_bh_005"] = bool(p_adj <= 0.05)
+    rows.sort(key=lambda row: (float(row["p_value_adj"]), -abs(float(row["effect_cliffs_delta"]))))
+    return rows
+
+
 def analyze_results(
     rows: list[dict[str, Any]],
     *,
@@ -206,6 +317,7 @@ def analyze_results(
     critical_baf_threshold: float = 0.8,
     correlation_top_n: int = 10,
     scenario_correlation_min_runs: int = 5,
+    significance_permutations: int = 2000,
 ) -> AnalysisSummary:
     working_rows = [dict(row) for row in rows]
 
@@ -336,6 +448,28 @@ def analyze_results(
         key=lambda x: x[1],
         reverse=True,
     )
+    pairwise_significance = {
+        "baf": _pairwise_significance_by_metric(
+            by_scenario,
+            metric_key="baf",
+            n_resamples=significance_permutations,
+            seed=91,
+        ),
+        "auc_normalized": _pairwise_significance_by_metric(
+            by_scenario,
+            metric_key="auc_normalized",
+            n_resamples=significance_permutations,
+            seed=191,
+        ),
+    }
+    overall["pairwise_significance_tests"] = {
+        metric: {
+            "pairs_total": len(rows_for_metric),
+            "significant_bh_005": int(sum(bool(item.get("significant_bh_005", False)) for item in rows_for_metric)),
+        }
+        for metric, rows_for_metric in pairwise_significance.items()
+    }
+    overall["pairwise_significance_permutations"] = int(max(1, significance_permutations))
 
     continuous_param_keys = sorted(
         {
@@ -463,6 +597,7 @@ def analyze_results(
         correlations_by_scenario_diagnostics=correlations_by_scenario_diagnostics,
         correlations_by_family=correlations_by_family,
         correlations_by_family_diagnostics=correlations_by_family_diagnostics,
+        scenario_pairwise_significance=pairwise_significance,
     )
 
 
@@ -773,7 +908,13 @@ def _save_plots(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
     return generated
 
 
-def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, reports_dir: str | Path) -> tuple[Path, Path, list[Path]]:
+def generate_report(
+    rows: list[dict[str, Any]],
+    summary: AnalysisSummary,
+    reports_dir: str | Path,
+    *,
+    censoring_audit: dict[str, Any] | None = None,
+) -> tuple[Path, Path, list[Path]]:
     output_dir = Path(reports_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     figures = _save_plots(rows, output_dir / "figures")
@@ -845,6 +986,8 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     top_continuous_corr_uncontrolled = summary.continuous_param_correlations[:5]
     top_continuous_corr_controlled = summary.continuous_param_correlations_controlled[:5]
     top_binary_effects = summary.binary_param_effects[:5]
+    top_pairwise_baf = summary.scenario_pairwise_significance.get("baf", [])[:5]
+    top_pairwise_auc_norm = summary.scenario_pairwise_significance.get("auc_normalized", [])[:5]
     sorted_scenario_names = sorted(summary.by_scenario.keys())
     sorted_family_names = sorted(summary.correlations_by_family_diagnostics.keys())
     elevated_censoring = [
@@ -895,6 +1038,15 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
             f"({summary.overall['censored_runs_share']:.4f})"
         ),
         (
+            "- Pairwise significance tests: "
+            f"{summary.overall.get('pairwise_significance_tests', {}).get('baf', {}).get('significant_bh_005', 0)} "
+            f"/ {summary.overall.get('pairwise_significance_tests', {}).get('baf', {}).get('pairs_total', 0)} "
+            "significant pairs for baf; "
+            f"{summary.overall.get('pairwise_significance_tests', {}).get('auc_normalized', {}).get('significant_bh_005', 0)} "
+            f"/ {summary.overall.get('pairwise_significance_tests', {}).get('auc_normalized', {}).get('pairs_total', 0)} "
+            "for auc_normalized (BH q<=0.05)."
+        ),
+        (
             "- Note: censored runs can bias metrics: fire_duration and AUC are typically underestimated, "
             "while BAF-related risk can be understated when fire is still active at truncation."
         ),
@@ -903,6 +1055,37 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     ]
     for name, score in top_worst:
         md_lines.append(f"- {name}: {score:.4f}")
+
+    if censoring_audit:
+        md_lines.append("")
+        md_lines.append("## Censoring max_steps bias audit")
+        md_lines.append(
+            "- Target rule: "
+            f"censored_share < {float(censoring_audit.get('target_censored_share', 0.0)):.4f}"
+        )
+        md_lines.append(f"- Initial max_steps: {int(censoring_audit.get('initial_max_steps', 0))}")
+        md_lines.append(f"- Final max_steps: {int(censoring_audit.get('final_max_steps', 0))}")
+        md_lines.append(f"- Stop reason: {str(censoring_audit.get('stop_reason', 'n/a'))}")
+        for round_info in censoring_audit.get("rounds", []):
+            md_lines.append(
+                "### Round "
+                f"{int(round_info.get('round', 0))}: max_steps "
+                f"{int(round_info.get('from_max_steps', 0))} -> {int(round_info.get('to_max_steps', 0))}"
+            )
+            md_lines.append(
+                f"- Re-run scenarios: {', '.join(round_info.get('rerun_scenarios', [])) or 'none'}"
+            )
+            for scenario_delta in round_info.get("scenario_deltas", []):
+                md_lines.append(
+                    "- "
+                    f"{scenario_delta['scenario']}: censored_share "
+                    f"{float(scenario_delta['before_censored_share']):.4f} -> "
+                    f"{float(scenario_delta['after_censored_share']):.4f}; "
+                    f"baf_mean_all {float(scenario_delta['before_baf_mean_all']):.4f} -> "
+                    f"{float(scenario_delta['after_baf_mean_all']):.4f}; "
+                    f"auc_normalized_mean_all {float(scenario_delta['before_auc_normalized_mean_all']):.4f} -> "
+                    f"{float(scenario_delta['after_auc_normalized_mean_all']):.4f}"
+                )
 
     md_lines.append("")
     md_lines.append("## Absolute KPI ranking")
@@ -957,6 +1140,34 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     md_lines.append(f"### {ranking_metric_label}")
     for name, score in top_worst:
         md_lines.append(f"- {name}: {score:.4f}")
+
+    md_lines.append("")
+    md_lines.append("## Scenario pairwise significance tests")
+    md_lines.append(
+        f"- Method: two-sided permutation test on mean differences "
+        f"({summary.overall.get('pairwise_significance_permutations', 0)} resamples), "
+        "Benjamini–Hochberg correction, and Cliff's delta effect size."
+    )
+    md_lines.append("### baf")
+    for item in top_pairwise_baf:
+        md_lines.append(
+            "- "
+            f"{item['scenario_a']} vs {item['scenario_b']}: "
+            f"mean_diff={float(item['mean_diff']):.4f}, "
+            f"p={float(item['p_value']):.4f}, q={float(item['p_value_adj']):.4f}, "
+            f"significant={bool(item['significant_bh_005'])}, "
+            f"cliffs_delta={float(item['effect_cliffs_delta']):.4f} ({item['effect_label']})"
+        )
+    md_lines.append("### auc_normalized")
+    for item in top_pairwise_auc_norm:
+        md_lines.append(
+            "- "
+            f"{item['scenario_a']} vs {item['scenario_b']}: "
+            f"mean_diff={float(item['mean_diff']):.4f}, "
+            f"p={float(item['p_value']):.4f}, q={float(item['p_value_adj']):.4f}, "
+            f"significant={bool(item['significant_bh_005'])}, "
+            f"cliffs_delta={float(item['effect_cliffs_delta']):.4f} ({item['effect_label']})"
+        )
 
     md_lines.append("")
     md_lines.append("## continuous_param_correlations (uncontrolled)")
@@ -1110,6 +1321,15 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
             f"({summary.overall['censored_runs_share']:.4f})</li>"
         ),
         (
+            "<li>Pairwise significance tests: "
+            f"{summary.overall.get('pairwise_significance_tests', {}).get('baf', {}).get('significant_bh_005', 0)} "
+            f"/ {summary.overall.get('pairwise_significance_tests', {}).get('baf', {}).get('pairs_total', 0)} "
+            "significant pairs for baf; "
+            f"{summary.overall.get('pairwise_significance_tests', {}).get('auc_normalized', {}).get('significant_bh_005', 0)} "
+            f"/ {summary.overall.get('pairwise_significance_tests', {}).get('auc_normalized', {}).get('pairs_total', 0)} "
+            "for auc_normalized (BH q&lt;=0.05).</li>"
+        ),
+        (
             "<li>Note: censored runs can bias metrics: fire_duration and AUC are typically underestimated, "
             "while BAF-related risk can be understated when fire is still active at truncation.</li>"
         ),
@@ -1119,6 +1339,40 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     for name, score in top_worst:
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
     html_lines.append("</ol>")
+    if censoring_audit:
+        html_lines.append("<h2>Censoring max_steps bias audit</h2><ul>")
+        html_lines.append(
+            "<li>Target rule: censored_share &lt; "
+            f"{float(censoring_audit.get('target_censored_share', 0.0)):.4f}</li>"
+        )
+        html_lines.append(f"<li>Initial max_steps: {int(censoring_audit.get('initial_max_steps', 0))}</li>")
+        html_lines.append(f"<li>Final max_steps: {int(censoring_audit.get('final_max_steps', 0))}</li>")
+        html_lines.append(f"<li>Stop reason: {str(censoring_audit.get('stop_reason', 'n/a'))}</li>")
+        html_lines.append("</ul>")
+        for round_info in censoring_audit.get("rounds", []):
+            html_lines.append(
+                "<h3>Round "
+                f"{int(round_info.get('round', 0))}: max_steps "
+                f"{int(round_info.get('from_max_steps', 0))} -&gt; {int(round_info.get('to_max_steps', 0))}</h3>"
+            )
+            html_lines.append(
+                "<p>Re-run scenarios: "
+                f"{', '.join(round_info.get('rerun_scenarios', [])) or 'none'}</p>"
+            )
+            html_lines.append("<ul>")
+            for scenario_delta in round_info.get("scenario_deltas", []):
+                html_lines.append(
+                    "<li>"
+                    f"{scenario_delta['scenario']}: censored_share "
+                    f"{float(scenario_delta['before_censored_share']):.4f} -&gt; "
+                    f"{float(scenario_delta['after_censored_share']):.4f}; "
+                    f"baf_mean_all {float(scenario_delta['before_baf_mean_all']):.4f} -&gt; "
+                    f"{float(scenario_delta['after_baf_mean_all']):.4f}; "
+                    f"auc_normalized_mean_all {float(scenario_delta['before_auc_normalized_mean_all']):.4f} -&gt; "
+                    f"{float(scenario_delta['after_auc_normalized_mean_all']):.4f}"
+                    "</li>"
+                )
+            html_lines.append("</ul>")
     html_lines.append("<h2>Absolute KPI ranking</h2>")
     html_lines.append("<h3>Mean burned area fraction (absolute, point estimate)</h3><ol>")
     for name, score in top_worst_abs_baf:
@@ -1175,7 +1429,36 @@ def generate_report(rows: list[dict[str, Any]], summary: AnalysisSummary, report
     html_lines.append(f"</ol><h3>{ranking_metric_label}</h3><ol>")
     for name, score in top_worst:
         html_lines.append(f"<li>{name}: {score:.4f}</li>")
-    html_lines.append("</ol><h2>continuous_param_correlations (uncontrolled)</h2>")
+    html_lines.append("</ol><h2>Scenario pairwise significance tests</h2>")
+    html_lines.append(
+        "<p>Method: two-sided permutation test on mean differences "
+        f"({summary.overall.get('pairwise_significance_permutations', 0)} resamples), "
+        "Benjamini–Hochberg correction, and Cliff's delta effect size.</p>"
+    )
+    html_lines.append("<h3>baf</h3><ul>")
+    for item in top_pairwise_baf:
+        html_lines.append(
+            "<li>"
+            f"{item['scenario_a']} vs {item['scenario_b']}: "
+            f"mean_diff={float(item['mean_diff']):.4f}, "
+            f"p={float(item['p_value']):.4f}, q={float(item['p_value_adj']):.4f}, "
+            f"significant={bool(item['significant_bh_005'])}, "
+            f"cliffs_delta={float(item['effect_cliffs_delta']):.4f} ({item['effect_label']})"
+            "</li>"
+        )
+    html_lines.append("</ul><h3>auc_normalized</h3><ul>")
+    for item in top_pairwise_auc_norm:
+        html_lines.append(
+            "<li>"
+            f"{item['scenario_a']} vs {item['scenario_b']}: "
+            f"mean_diff={float(item['mean_diff']):.4f}, "
+            f"p={float(item['p_value']):.4f}, q={float(item['p_value_adj']):.4f}, "
+            f"significant={bool(item['significant_bh_005'])}, "
+            f"cliffs_delta={float(item['effect_cliffs_delta']):.4f} ({item['effect_label']})"
+            "</li>"
+        )
+    html_lines.append("</ul>")
+    html_lines.append("<h2>continuous_param_correlations (uncontrolled)</h2>")
     html_lines.append("<p>Note: these are global Pearson correlations for continuous params only.</p><ul>")
     for pkey, mkey, corr, ci_low, ci_high in top_continuous_corr_uncontrolled:
         html_lines.append(f"<li>{pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}</li>")
