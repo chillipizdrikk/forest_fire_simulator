@@ -75,6 +75,9 @@ def test_metrics_payload_invariants_no_rain_golden_scenario() -> None:
         "time_to_peak": 1,
         "fire_duration": 2,
         "auc": 2,
+        "burned_components": 1,
+        "largest_cluster_share": 1.0,
+        "shape_complexity": 4.0,
     }
 
 
@@ -101,6 +104,9 @@ def test_metrics_payload_invariants_rain_golden_scenario() -> None:
         "time_to_peak": 0,
         "fire_duration": 0,
         "auc": 0,
+        "burned_components": 0,
+        "largest_cluster_share": 0.0,
+        "shape_complexity": 0.0,
     }
 
 
@@ -130,4 +136,7 @@ def test_metrics_payload_invariants_lightning_golden_scenario() -> None:
         "time_to_peak": 1,
         "fire_duration": 3,
         "auc": 3,
+        "burned_components": 1,
+        "largest_cluster_share": 1.0,
+        "shape_complexity": 4.0,
     }

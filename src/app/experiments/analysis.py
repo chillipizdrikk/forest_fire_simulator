@@ -475,6 +475,15 @@ def analyze_results(
         "auc_normalized_mean": _mean_metric(working_rows, "auc_normalized"),
         "auc_normalized_mean_all": _mean_metric(working_rows, "auc_normalized"),
         "auc_normalized_mean_uncensored": _mean_metric(uncensored_all, "auc_normalized"),
+        "burned_components_mean": _mean_metric(working_rows, "burned_components"),
+        "burned_components_mean_all": _mean_metric(working_rows, "burned_components"),
+        "burned_components_mean_uncensored": _mean_metric(uncensored_all, "burned_components"),
+        "largest_cluster_share_mean": _mean_metric(working_rows, "largest_cluster_share"),
+        "largest_cluster_share_mean_all": _mean_metric(working_rows, "largest_cluster_share"),
+        "largest_cluster_share_mean_uncensored": _mean_metric(uncensored_all, "largest_cluster_share"),
+        "shape_complexity_mean": _mean_metric(working_rows, "shape_complexity"),
+        "shape_complexity_mean_all": _mean_metric(working_rows, "shape_complexity"),
+        "shape_complexity_mean_uncensored": _mean_metric(uncensored_all, "shape_complexity"),
         "time_to_extinguish_mean": _mean_metric(ignited_rows, "time_to_extinguish"),
         "time_to_extinguish_mean_all": _mean_metric(working_rows, "time_to_extinguish"),
         "time_to_extinguish_mean_uncensored": _mean_metric(uncensored_ignited, "time_to_extinguish"),
@@ -508,6 +517,9 @@ def analyze_results(
         local_auc = [float(item.get("auc", 0.0)) for item in items]
         local_peak_norm = [float(item.get("peak_fire_fraction", 0.0)) for item in items]
         local_auc_norm = [float(item.get("auc_normalized", 0.0)) for item in items]
+        local_components = [float(item.get("burned_components", 0.0)) for item in items]
+        local_largest_cluster_share = [float(item.get("largest_cluster_share", 0.0)) for item in items]
+        local_shape_complexity = [float(item.get("shape_complexity", 0.0)) for item in items]
         uncensored_items = _uncensored_rows(items)
         ignited_items = _ignited_rows(items)
         uncensored_ignited_items = _uncensored_rows(ignited_items)
@@ -552,6 +564,14 @@ def analyze_results(
             "auc_normalized_mean": float(mean(local_auc_norm)) if local_auc_norm else 0.0,
             "auc_normalized_mean_all": float(mean(local_auc_norm)) if local_auc_norm else 0.0,
             "auc_normalized_mean_uncensored": _mean_metric(uncensored_items, "auc_normalized"),
+            "burned_components_mean": float(mean(local_components)) if local_components else 0.0,
+            "burned_components_mean_uncensored": _mean_metric(uncensored_items, "burned_components"),
+            "largest_cluster_share_mean": (
+                float(mean(local_largest_cluster_share)) if local_largest_cluster_share else 0.0
+            ),
+            "largest_cluster_share_mean_uncensored": _mean_metric(uncensored_items, "largest_cluster_share"),
+            "shape_complexity_mean": float(mean(local_shape_complexity)) if local_shape_complexity else 0.0,
+            "shape_complexity_mean_uncensored": _mean_metric(uncensored_items, "shape_complexity"),
             "critical_count": int(sum(bool(item.get("critical", False)) for item in items)),
             "critical_mean_all": _critical_share(items),
             "critical_mean_uncensored": _critical_share(uncensored_items),
@@ -577,6 +597,22 @@ def analyze_results(
         key=lambda x: x[1],
         reverse=True,
     )
+    overall["ranking_by_burned_components_mean"] = sorted(
+        ((name, float(stats.get("burned_components_mean", 0.0))) for name, stats in scenario_stats.items()),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+    overall["ranking_by_shape_complexity_mean"] = sorted(
+        ((name, float(stats.get("shape_complexity_mean", 0.0))) for name, stats in scenario_stats.items()),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+    overall["ranking_by_largest_cluster_share_mean"] = sorted(
+        ((name, float(stats.get("largest_cluster_share_mean", 0.0))) for name, stats in scenario_stats.items()),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+
     pairwise_significance = {
         "baf": _pairwise_significance_by_metric(
             by_scenario,
@@ -613,7 +649,16 @@ def analyze_results(
     binary_param_keys = sorted(
         {key for row in working_rows for key in row if key.startswith("param_") and isinstance(row[key], bool)}
     )
-    metric_keys = ["baf", "peak_fire_size", "fire_duration", "max_spread_rate", "time_to_extinguish"]
+    metric_keys = [
+        "baf",
+        "peak_fire_size",
+        "fire_duration",
+        "max_spread_rate",
+        "time_to_extinguish",
+        "burned_components",
+        "largest_cluster_share",
+        "shape_complexity",
+    ]
     continuous_param_correlations = _collect_top_correlations(
         working_rows,
         continuous_param_keys,

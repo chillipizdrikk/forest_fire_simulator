@@ -94,6 +94,7 @@ class ForestFireCA:
             burning_cells=self.burning_cells_history,
             initial_tree_cells=self.initial_tree_cells,
             final_counts=self.final_counts,
+            burnt_mask=(self.grid == BURNT),
         )
 
     def finalize_run_metrics(self) -> dict[str, int | float]:
@@ -102,6 +103,7 @@ class ForestFireCA:
             burning_cells=self.burning_cells_history,
             initial_tree_cells=self.initial_tree_cells,
             final_counts=self.final_counts,
+            burnt_mask=(self.grid == BURNT),
         )
         return self.latest_metrics
 
