@@ -16,7 +16,7 @@ class MetricDefinition:
     scope: Literal["core", "derived"]
 
 
-METRICS_SCHEMA: dict[str, MetricDefinition] = {
+RUN_METRICS_SCHEMA: dict[str, MetricDefinition] = {
     "baf": MetricDefinition(
         key="baf",
         formula="min(1.0, final_counts['burnt'] / initial_tree_cells), якщо initial_tree_cells > 0, інакше 0.0",
@@ -126,8 +126,11 @@ METRICS_SCHEMA: dict[str, MetricDefinition] = {
     ),
 }
 
+# Backward-compatible alias for existing imports.
+METRICS_SCHEMA = RUN_METRICS_SCHEMA
+
 
 def metrics_keys(*, scope: Literal["all", "core", "derived"] = "all") -> list[str]:
     if scope == "all":
-        return list(METRICS_SCHEMA.keys())
-    return [key for key, definition in METRICS_SCHEMA.items() if definition.scope == scope]
+        return list(RUN_METRICS_SCHEMA.keys())
+    return [key for key, definition in RUN_METRICS_SCHEMA.items() if definition.scope == scope]
