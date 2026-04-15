@@ -86,7 +86,7 @@ METRICS_SCHEMA: dict[str, MetricDefinition] = {
     ),
     "max_spread_rate": MetricDefinition(
         key="max_spread_rate",
-        formula="max_t(burning_cells_t[t] - burning_cells_t[t-1])",
+        formula="max(0, max_t(burning_cells_t[t] - burning_cells_t[t-1]))",
         units="клітини/крок",
         valid_range=">= 0",
         interpretation="higher_is_worse",

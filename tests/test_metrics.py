@@ -135,6 +135,10 @@ def test_max_spread_rate_uses_max_positive_delta() -> None:
     assert max_spread_rate([0, 1, 4, 2, 7]) == 5
 
 
+def test_max_spread_rate_returns_zero_for_monotonic_decrease() -> None:
+    assert max_spread_rate([5, 4, 3]) == 0
+
+
 def test_calculate_derived_metrics_includes_critical_and_steps_total() -> None:
     result = calculate_derived_metrics(
         burning_cells=[0, 1, 4, 0],

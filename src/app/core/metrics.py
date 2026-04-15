@@ -59,7 +59,7 @@ def max_spread_rate(burning_cells: Sequence[int]) -> int:
     if len(series) < 2:
         return 0
     diffs = [series[idx] - series[idx - 1] for idx in range(1, len(series))]
-    return int(max(diffs, default=0))
+    return int(max(0, max(diffs, default=0)))
 
 
 def calculate_fire_metrics(
