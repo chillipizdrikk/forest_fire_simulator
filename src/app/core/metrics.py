@@ -43,6 +43,8 @@ def burned_area_fraction(initial_tree_cells: int, final_burnt_cells: int) -> flo
 
 def time_to_extinguish(burning_cells: Sequence[int]) -> int:
     series = _clean_burning_series(burning_cells)
+    if all(burning == 0 for burning in series):
+        return 0
     fire_started = False
     for step_idx, burning in enumerate(series):
         if burning > 0:

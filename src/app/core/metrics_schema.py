@@ -75,7 +75,10 @@ METRICS_SCHEMA: dict[str, MetricDefinition] = {
     ),
     "time_to_extinguish": MetricDefinition(
         key="time_to_extinguish",
-        formula="перший індекс t після старту вогню, де burning_cells_t[t] == 0; якщо не згасло — останній індекс",
+        formula=(
+            "перший індекс t після старту вогню, де burning_cells_t[t] == 0; "
+            "якщо загоряння не було — 0; якщо не згасло — останній індекс"
+        ),
         units="кроки (0-based індекс)",
         valid_range=">= 0",
         interpretation="higher_is_worse",
