@@ -193,6 +193,10 @@ def _uncensored_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [row for row in rows if not bool(row.get("truncated_by_max_steps", False))]
 
 
+def _ignited_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if not bool(row.get("no_ignition", False))]
+
+
 def _mean_metric(rows: list[dict[str, Any]], key: str) -> float:
     values = [float(row.get(key, 0.0)) for row in rows]
     return float(mean(values)) if values else 0.0
@@ -427,9 +431,11 @@ def analyze_results(
     significance_permutations: int = 2000,
 ) -> AnalysisSummary:
     working_rows = [dict(row) for row in rows]
+    ignited_rows = _ignited_rows(working_rows)
 
     uncensored_all = _uncensored_rows(working_rows)
-    global_tte_rows = uncensored_all if uncensored_all else working_rows
+    uncensored_ignited = _uncensored_rows(ignited_rows)
+    global_tte_rows = uncensored_ignited if uncensored_ignited else ignited_rows
     global_tte_values = [float(row.get("time_to_extinguish", 0.0)) for row in global_tte_rows]
     global_tte_norm = _normalize_01(global_tte_values)
     global_tte_norm_by_run_id = {
@@ -443,6 +449,8 @@ def analyze_results(
     baf_values = [float(row.get("baf", 0.0)) for row in working_rows]
     censored_runs_count = int(sum(bool(row.get("truncated_by_max_steps", False)) for row in working_rows))
     censored_runs_share = float(censored_runs_count / len(working_rows)) if working_rows else 0.0
+    no_ignition_runs_count = int(sum(bool(row.get("no_ignition", False)) for row in working_rows))
+    no_ignition_runs_share = float(no_ignition_runs_count / len(working_rows)) if working_rows else 0.0
     tte_min = min(global_tte_values) if global_tte_values else 0.0
     tte_max = max(global_tte_values) if global_tte_values else 0.0
     tte_span = tte_max - tte_min
@@ -450,6 +458,9 @@ def analyze_results(
         run_id = str(row.get("run_id", ""))
         if run_id in global_tte_norm_by_run_id:
             row["time_to_extinguish_global_norm"] = float(global_tte_norm_by_run_id[run_id])
+            continue
+        if bool(row.get("no_ignition", False)):
+            row["time_to_extinguish_global_norm"] = 0.0
             continue
         if tte_span == 0.0:
             row["time_to_extinguish_global_norm"] = 0.0
@@ -464,9 +475,9 @@ def analyze_results(
         "auc_normalized_mean": _mean_metric(working_rows, "auc_normalized"),
         "auc_normalized_mean_all": _mean_metric(working_rows, "auc_normalized"),
         "auc_normalized_mean_uncensored": _mean_metric(uncensored_all, "auc_normalized"),
-        "time_to_extinguish_mean": _mean_metric(working_rows, "time_to_extinguish"),
+        "time_to_extinguish_mean": _mean_metric(ignited_rows, "time_to_extinguish"),
         "time_to_extinguish_mean_all": _mean_metric(working_rows, "time_to_extinguish"),
-        "time_to_extinguish_mean_uncensored": _mean_metric(uncensored_all, "time_to_extinguish"),
+        "time_to_extinguish_mean_uncensored": _mean_metric(uncensored_ignited, "time_to_extinguish"),
         "critical_mean_all": _critical_share(working_rows),
         "critical_mean_uncensored": _critical_share(uncensored_all),
         "baf_p95": _percentile(baf_values, 0.95),
@@ -481,7 +492,9 @@ def analyze_results(
         "scenario_ranking_metric": ranking_metric,
         "censored_runs_count": censored_runs_count,
         "censored_runs_share": censored_runs_share,
-        "time_to_extinguish_norm_scope": "uncensored_only" if uncensored_all else "all_runs",
+        "no_ignition_runs_count": no_ignition_runs_count,
+        "no_ignition_runs_share": no_ignition_runs_share,
+        "time_to_extinguish_norm_scope": "uncensored_ignited_only" if uncensored_ignited else "ignited_runs",
         "time_to_extinguish_global_min": tte_min,
         "time_to_extinguish_global_max": tte_max,
     }
@@ -494,6 +507,8 @@ def analyze_results(
         local_peak_norm = [float(item.get("peak_fire_fraction", 0.0)) for item in items]
         local_auc_norm = [float(item.get("auc_normalized", 0.0)) for item in items]
         uncensored_items = _uncensored_rows(items)
+        ignited_items = _ignited_rows(items)
+        uncensored_ignited_items = _uncensored_rows(ignited_items)
         run_tte_global_norm = [float(item.get("time_to_extinguish_global_norm", 0.0)) for item in items]
         run_risk_scores = [
             float(
@@ -506,13 +521,14 @@ def analyze_results(
                     ]
                 )
             )
-            for baf, auc_norm, peak_norm, tte_global_norm in zip(
-                local_baf, local_auc_norm, local_peak_norm, run_tte_global_norm
+            for item, baf, auc_norm, peak_norm, tte_global_norm in zip(
+                items, local_baf, local_auc_norm, local_peak_norm, run_tte_global_norm
             )
+            if not bool(item.get("no_ignition", False))
         ]
         run_risk_scores_uncensored = [
             score
-            for item, score in zip(items, run_risk_scores)
+            for item, score in zip(ignited_items, run_risk_scores)
             if not bool(item.get("truncated_by_max_steps", False))
         ]
         baf_mean_ci_low, baf_mean_ci_high = _bootstrap_mean_ci(local_baf, confidence=0.95)
@@ -539,15 +555,17 @@ def analyze_results(
             "critical_mean_uncensored": _critical_share(uncensored_items),
             "censored_share": float(sum(bool(item.get("truncated_by_max_steps", False)) for item in items) / len(items)),
             "max_spread_rate_mean": float(mean(float(item.get("max_spread_rate", 0.0)) for item in items)),
-            "time_to_extinguish_mean": float(mean(float(item.get("time_to_extinguish", 0.0)) for item in items)),
+            "time_to_extinguish_mean": _mean_metric(ignited_items, "time_to_extinguish"),
             "time_to_extinguish_mean_all": float(mean(float(item.get("time_to_extinguish", 0.0)) for item in items)),
-            "time_to_extinguish_mean_uncensored": _mean_metric(uncensored_items, "time_to_extinguish"),
+            "time_to_extinguish_mean_uncensored": _mean_metric(uncensored_ignited_items, "time_to_extinguish"),
             "risk_score_mean": float(mean(run_risk_scores)) if run_risk_scores else 0.0,
             "risk_score_mean_uncensored": (
                 float(mean(run_risk_scores_uncensored)) if run_risk_scores_uncensored else 0.0
             ),
             "risk_score_mean_ci_low": risk_mean_ci_low,
             "risk_score_mean_ci_high": risk_mean_ci_high,
+            "no_ignition_count": int(sum(bool(item.get("no_ignition", False)) for item in items)),
+            "no_ignition_share": float(sum(bool(item.get("no_ignition", False)) for item in items) / len(items)),
         }
 
     ranking = sorted(

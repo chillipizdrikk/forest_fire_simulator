@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 
 from src.app.core.config import CAConfig
+from src.app.core.constants import TREE_STATES
 from src.app.core.engine import ForestFireCA
 from src.app.core.metrics import calculate_derived_metrics
 from src.app.experiments.scenarios import ScenarioDefinition
@@ -23,16 +24,67 @@ class ExperimentResult:
     metrics: dict[str, Any]
 
 
-def _first_ignition_point(cfg: CAConfig) -> tuple[int, int]:
-    return cfg.height // 2, cfg.width // 2
+def _first_ignition_point(ca: ForestFireCA) -> tuple[int, int] | None:
+    center_row = ca.cfg.height // 2
+    center_col = ca.cfg.width // 2
+    if int(ca.grid[center_row, center_col]) in TREE_STATES:
+        return center_row, center_col
+
+    tree_positions = np.argwhere(np.isin(ca.grid, TREE_STATES))
+    if tree_positions.size == 0:
+        return None
+
+    center = np.array([center_row, center_col])
+    distances = np.sum(np.abs(tree_positions - center), axis=1)
+    nearest_idx = int(np.argmin(distances))
+    row, col = tree_positions[nearest_idx]
+    return int(row), int(col)
 
 
 def _simulate_single_run(cfg: CAConfig, max_steps: int, critical_baf_threshold: float) -> dict[str, Any]:
     ca = ForestFireCA(cfg)
-    ignite_row, ignite_col = _first_ignition_point(cfg)
+    ignition_point = _first_ignition_point(ca)
+
+    if ignition_point is None:
+        final_metrics = ca.finalize_run_metrics()
+        series = [int(v) for v in ca.burning_cells_history]
+        return {
+            "ignition_succeeded": False,
+            "no_ignition": True,
+            "truncated_by_max_steps": False,
+            **final_metrics,
+            **calculate_derived_metrics(
+                burning_cells=series,
+                step_count=ca.step_count,
+                initial_tree_cells=ca.initial_tree_cells,
+                critical_baf_threshold=critical_baf_threshold,
+                baf=float(final_metrics.get("baf", 0.0)),
+                steps_total_or_fire_horizon=ca.step_count,
+            ),
+        }
+
+    ignite_row, ignite_col = ignition_point
     ca.ignite(ignite_row, ignite_col)
 
     fire_started = ca.has_active_fire()
+    if not fire_started:
+        final_metrics = ca.finalize_run_metrics()
+        series = [int(v) for v in ca.burning_cells_history]
+        return {
+            "ignition_succeeded": False,
+            "no_ignition": True,
+            "truncated_by_max_steps": False,
+            **final_metrics,
+            **calculate_derived_metrics(
+                burning_cells=series,
+                step_count=ca.step_count,
+                initial_tree_cells=ca.initial_tree_cells,
+                critical_baf_threshold=critical_baf_threshold,
+                baf=float(final_metrics.get("baf", 0.0)),
+                steps_total_or_fire_horizon=ca.step_count,
+            ),
+        }
+
     loop_exhausted = True
     for _ in range(max_steps):
         if fire_started and not ca.has_active_fire():
@@ -47,6 +99,8 @@ def _simulate_single_run(cfg: CAConfig, max_steps: int, critical_baf_threshold: 
     series = [int(v) for v in ca.burning_cells_history]
 
     return {
+        "ignition_succeeded": True,
+        "no_ignition": False,
         "truncated_by_max_steps": truncated_by_max_steps,
         **final_metrics,
         **calculate_derived_metrics(
