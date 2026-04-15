@@ -123,6 +123,14 @@ def test_time_to_extinguish_returns_first_zero_after_fire_start() -> None:
     assert time_to_extinguish([0, 2, 3, 1, 0, 0]) == 4
 
 
+def test_time_to_extinguish_returns_zero_when_fire_never_starts_all_zeros() -> None:
+    assert time_to_extinguish([0, 0, 0, 0]) == 0
+
+
+def test_time_to_extinguish_returns_zero_when_fire_never_starts_after_cleaning() -> None:
+    assert time_to_extinguish([-1.9, -0.2, 0.0]) == 0
+
+
 def test_max_spread_rate_uses_max_positive_delta() -> None:
     assert max_spread_rate([0, 1, 4, 2, 7]) == 5
 
