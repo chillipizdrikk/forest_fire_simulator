@@ -12,7 +12,7 @@
 | `fire_duration` | Кількість кроків, де `burning_cells_t > 0` | `>=0` | гірше | Тривалість активної фази пожежі |
 | `auc` | Сума `burning_cells_t` (клітино-кроки) | `>=0` | гірше | Інтегральна інтенсивність пожежі |
 | `time_to_extinguish` | Перший крок після старту, де `burning=0` (якщо загоряння не було — `0`) | `>=0` | гірше | Час до повного згасання |
-| `max_spread_rate` | Макс. приріст `burning[t]-burning[t-1]` | `>=0` | гірше | Найагресивніше “розкручування” |
+| `max_spread_rate` | `max(0, max приростів burning[t]-burning[t-1])` | `>=0` | гірше | Найагресивніше “розкручування” |
 | `peak_fire_fraction` | `peak_fire_size / initial_tree_cells` | `0..1` | гірше | Нормалізований пік для порівнянь |
 | `auc_normalized` | `auc / (initial_tree_cells * len(burning_cells_t))` (t0 включено) | `0..1` | гірше | Порівняння прогонів різного масштабу |
 | `critical` | `baf >= critical_baf_threshold` | bool | гірше | Швидкий бінарний індикатор ризику |

@@ -145,7 +145,7 @@ Core-метрики (рахуються у `src/app/core/metrics.py`):
 Похідні метрики (для експериментів, також через `src/app/core/metrics.py` API):
 
 - `time_to_extinguish` — крок повного згасання після старту пожежі.
-- `max_spread_rate` — максимальний приріст `burning_cells_t` між сусідніми кроками.
+- `max_spread_rate` — `max(0, max приростів burning_cells_t між сусідніми кроками)`.
 - `steps_total` — фактична кількість виконаних кроків симуляції.
 - `critical` — булева ознака `baf >= critical_baf_threshold`.
 
