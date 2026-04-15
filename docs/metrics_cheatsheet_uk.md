@@ -121,8 +121,8 @@
 1. Залишити 2–3 екстремальні сценарії як якорі (верх/низ ризику).  
 2. Додати 4–6 перехідних сценаріїв між ними.  
 3. Цілитись у діапазони:
-   - `baf_mean ≈ 0.2..0.8`,
-   - `critical_share ≈ 0.2..0.8`.
+   - `baf_mean_all ≈ 0.2..0.8`,
+   - `critical_mean_all ≈ 0.2..0.8` (або alias `critical_share` у summary-генераторі).
 4. Для grid/sweep перевіряти, наприклад:
    - `humidity`: `0.2, 0.3, 0.4, 0.5, 0.6`,
    - `wind_strength`: `0.2, 0.4, 0.6, 0.8`,
@@ -131,7 +131,7 @@
 
 Що дивитись у звіті, окрім середніх:
 - перцентилі `p25/p50/p75/p95`,
-- `critical_share`,
+- `critical_mean_all` / `critical_mean_uncensored` (або alias `critical_share` / `critical_share_uncensored`),
 - `auc_normalized`,
 - `time_to_extinguish`.
 

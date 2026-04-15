@@ -131,7 +131,8 @@ Result schema includes:
 
 ## Metrics dictionary
 
-Єдиний контракт метрик описано в `src/app/core/metrics_schema.py`.
+Контракт **run-level** метрик описано в `src/app/core/metrics_schema.py`.
+Контракт **scenario/overall summary aggregates** описано в `src/app/core/summary_schema.py`.
 Швидка шпаргалка українською: `docs/metrics_cheatsheet_uk.md`.
 
 Core-метрики (рахуються у `src/app/core/metrics.py`):
@@ -166,9 +167,29 @@ Core-метрики (рахуються у `src/app/core/metrics.py`):
 }
 ```
 
-Приклад рядка експериментів (`run_experiments.py`):
+Приклад рядка run-level результатів (`run_experiments.py`, один прогін):
 
 ```text
 run_id,scenario,seed,baf,peak_fire_size,time_to_peak,fire_duration,auc,time_to_extinguish,max_spread_rate,steps_total,critical
 baseline-0000,baseline,123456,0.1538,7,3,4,16,5,4,6,false
+```
+
+Приклад scenario-level summary (агреговано по багатьох прогонах одного сценарію):
+
+```json
+{
+  "scenario": "baseline",
+  "runs": 100,
+  "baf_mean_all": 0.4121,
+  "baf_mean_uncensored": 0.3874,
+  "baf_mean_ci_low": 0.3650,
+  "baf_mean_ci_high": 0.4591,
+  "critical_mean_all": 0.2700,
+  "critical_mean_uncensored": 0.2200,
+  "critical_share": 0.2700,
+  "risk_score_mean": 0.5332,
+  "risk_score_mean_uncensored": 0.5017,
+  "risk_score_mean_ci_low": 0.4924,
+  "risk_score_mean_ci_high": 0.5722
+}
 ```
