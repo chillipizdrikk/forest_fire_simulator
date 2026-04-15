@@ -10,6 +10,15 @@ _COMPONENT_DIRS_8 = (
 )
 
 
+def _burned_perimeter(mask: np.ndarray) -> int:
+    """Return perimeter using 4-neighbour exposed edges."""
+    top_edges = np.count_nonzero(mask[0, :]) + np.count_nonzero(mask[1:, :] & ~mask[:-1, :])
+    bottom_edges = np.count_nonzero(mask[-1, :]) + np.count_nonzero(mask[:-1, :] & ~mask[1:, :])
+    left_edges = np.count_nonzero(mask[:, 0]) + np.count_nonzero(mask[:, 1:] & ~mask[:, :-1])
+    right_edges = np.count_nonzero(mask[:, -1]) + np.count_nonzero(mask[:, :-1] & ~mask[:, 1:])
+    return int(top_edges + bottom_edges + left_edges + right_edges)
+
+
 def burned_spatial_metrics(burnt_mask: np.ndarray) -> dict[str, int | float]:
     mask = np.asarray(burnt_mask, dtype=bool)
     if mask.ndim != 2:
@@ -28,44 +37,45 @@ def burned_spatial_metrics(burnt_mask: np.ndarray) -> dict[str, int | float]:
     largest_component = 0
     h, w = mask.shape
 
-    for row in range(h):
-        for col in range(w):
-            if not mask[row, col] or visited[row, col]:
-                continue
+    # Iterate only through burnt cells to reduce Python-level loop work.
+    burnt_coords = np.argwhere(mask)
 
-            components += 1
-            stack = [(row, col)]
-            visited[row, col] = True
-            component_size = 0
+    # Fixed-size stacks avoid per-node tuple allocations in Python lists.
+    stack_rows = np.empty(burnt_area, dtype=np.int32)
+    stack_cols = np.empty(burnt_area, dtype=np.int32)
 
-            while stack:
-                cr, cc = stack.pop()
-                component_size += 1
-                for dr, dc in _COMPONENT_DIRS_8:
-                    nr = cr + dr
-                    nc = cc + dc
-                    if nr < 0 or nr >= h or nc < 0 or nc >= w:
-                        continue
-                    if not mask[nr, nc] or visited[nr, nc]:
-                        continue
-                    visited[nr, nc] = True
-                    stack.append((nr, nc))
+    for row, col in burnt_coords:
+        if visited[row, col]:
+            continue
 
-            largest_component = max(largest_component, component_size)
+        components += 1
+        visited[row, col] = True
+        component_size = 0
+        stack_size = 1
+        stack_rows[0] = row
+        stack_cols[0] = col
 
-    perimeter = 0
-    for row in range(h):
-        for col in range(w):
-            if not mask[row, col]:
-                continue
-            if row == 0 or not mask[row - 1, col]:
-                perimeter += 1
-            if row == h - 1 or not mask[row + 1, col]:
-                perimeter += 1
-            if col == 0 or not mask[row, col - 1]:
-                perimeter += 1
-            if col == w - 1 or not mask[row, col + 1]:
-                perimeter += 1
+        while stack_size:
+            stack_size -= 1
+            cr = stack_rows[stack_size]
+            cc = stack_cols[stack_size]
+            component_size += 1
+
+            for dr, dc in _COMPONENT_DIRS_8:
+                nr = cr + dr
+                nc = cc + dc
+                if nr < 0 or nr >= h or nc < 0 or nc >= w:
+                    continue
+                if not mask[nr, nc] or visited[nr, nc]:
+                    continue
+                visited[nr, nc] = True
+                stack_rows[stack_size] = nr
+                stack_cols[stack_size] = nc
+                stack_size += 1
+
+        largest_component = max(largest_component, component_size)
+
+    perimeter = _burned_perimeter(mask)
 
     return {
         "burned_components": int(components),
