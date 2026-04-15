@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Sequence
 
+
 METRICS_PAYLOAD_SCHEMA_VERSION = 2
 
 
@@ -66,6 +67,8 @@ def calculate_fire_metrics(
     burning_cells: Sequence[int],
     initial_tree_cells: int,
     final_counts: dict[str, int],
+    *,
+    burnt_mask: object | None = None,
 ) -> dict[str, int | float]:
     final_burnt = int(final_counts.get("burnt", 0))
     metrics = {
@@ -75,6 +78,16 @@ def calculate_fire_metrics(
         "fire_duration": fire_duration(burning_cells),
         "auc": area_under_curve(burning_cells),
     }
+    if burnt_mask is not None:
+        from src.app.core.spatial_metrics import burned_spatial_metrics
+
+        metrics.update(burned_spatial_metrics(burnt_mask))
+    else:
+        metrics.update({
+            "burned_components": 0,
+            "largest_cluster_share": 0.0,
+            "shape_complexity": 0.0,
+        })
     return metrics
 
 

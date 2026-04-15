@@ -41,12 +41,20 @@ def _first_ignition_point(ca: ForestFireCA) -> tuple[int, int] | None:
     return int(row), int(col)
 
 
+def _with_spatial_metric_defaults(metrics: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(metrics)
+    normalized.setdefault("burned_components", 0)
+    normalized.setdefault("largest_cluster_share", 0.0)
+    normalized.setdefault("shape_complexity", 0.0)
+    return normalized
+
+
 def _simulate_single_run(cfg: CAConfig, max_steps: int, critical_baf_threshold: float) -> dict[str, Any]:
     ca = ForestFireCA(cfg)
     ignition_point = _first_ignition_point(ca)
 
     if ignition_point is None:
-        final_metrics = ca.finalize_run_metrics()
+        final_metrics = _with_spatial_metric_defaults(ca.finalize_run_metrics())
         series = [int(v) for v in ca.burning_cells_history]
         return {
             "ignition_succeeded": False,
@@ -68,7 +76,7 @@ def _simulate_single_run(cfg: CAConfig, max_steps: int, critical_baf_threshold: 
 
     fire_started = ca.has_active_fire()
     if not fire_started:
-        final_metrics = ca.finalize_run_metrics()
+        final_metrics = _with_spatial_metric_defaults(ca.finalize_run_metrics())
         series = [int(v) for v in ca.burning_cells_history]
         return {
             "ignition_succeeded": False,
@@ -95,7 +103,7 @@ def _simulate_single_run(cfg: CAConfig, max_steps: int, critical_baf_threshold: 
 
     truncated_by_max_steps = bool(loop_exhausted and fire_started and ca.has_active_fire())
 
-    final_metrics = ca.finalize_run_metrics()
+    final_metrics = _with_spatial_metric_defaults(ca.finalize_run_metrics())
     series = [int(v) for v in ca.burning_cells_history]
 
     return {

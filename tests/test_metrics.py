@@ -100,6 +100,9 @@ def test_calculate_fire_metrics_handles_empty_series_and_missing_burnt() -> None
         "time_to_peak": 0,
         "fire_duration": 0,
         "auc": 0,
+        "burned_components": 0,
+        "largest_cluster_share": 0.0,
+        "shape_complexity": 0.0,
     }
 
 
@@ -116,6 +119,9 @@ def test_calculate_fire_metrics_with_multiple_equal_peaks_and_clamped_baf() -> N
         "time_to_peak": 2,
         "fire_duration": 3,
         "auc": 12,
+        "burned_components": 0,
+        "largest_cluster_share": 0.0,
+        "shape_complexity": 0.0,
     }
 
 

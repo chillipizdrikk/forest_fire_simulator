@@ -511,3 +511,55 @@ def test_analysis_builds_2d_interaction_surface_for_top_baf_params() -> None:
     assert surface["cells_observed"] == 4
     assert surface["cell_coverage"] == 1.0
     assert "interaction_surface_primary_pair" in summary.overall
+
+
+def test_analysis_aggregates_and_ranks_new_spatial_metrics() -> None:
+    rows = [
+        {
+            "scenario": "s1",
+            "run_id": "s1-1",
+            "baf": 0.4,
+            "auc_normalized": 0.3,
+            "time_to_extinguish": 10,
+            "critical": False,
+            "truncated_by_max_steps": False,
+            "peak_fire_size": 2,
+            "auc": 5,
+            "peak_fire_fraction": 0.2,
+            "max_spread_rate": 1.5,
+            "fire_duration": 5,
+            "burned_components": 3,
+            "largest_cluster_share": 0.5,
+            "shape_complexity": 2.2,
+        },
+        {
+            "scenario": "s2",
+            "run_id": "s2-1",
+            "baf": 0.5,
+            "auc_normalized": 0.35,
+            "time_to_extinguish": 12,
+            "critical": False,
+            "truncated_by_max_steps": False,
+            "peak_fire_size": 3,
+            "auc": 6,
+            "peak_fire_fraction": 0.25,
+            "max_spread_rate": 1.7,
+            "fire_duration": 6,
+            "burned_components": 1,
+            "largest_cluster_share": 1.0,
+            "shape_complexity": 1.6,
+        },
+    ]
+
+    summary = analyze_results(rows)
+
+    assert summary.overall["burned_components_mean_all"] == pytest.approx(2.0)
+    assert summary.overall["largest_cluster_share_mean_all"] == pytest.approx(0.75)
+    assert summary.overall["shape_complexity_mean_all"] == pytest.approx(1.9)
+
+    assert summary.by_scenario["s1"]["burned_components_mean"] == pytest.approx(3.0)
+    assert summary.by_scenario["s2"]["largest_cluster_share_mean"] == pytest.approx(1.0)
+
+    assert summary.overall["ranking_by_burned_components_mean"][0][0] == "s1"
+    assert summary.overall["ranking_by_shape_complexity_mean"][0][0] == "s1"
+    assert summary.overall["ranking_by_largest_cluster_share_mean"][0][0] == "s2"
