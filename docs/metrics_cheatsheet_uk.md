@@ -14,7 +14,7 @@
 | `time_to_extinguish` | Перший крок після старту, де `burning=0` (якщо загоряння не було — `0`) | `>=0` | гірше | Час до повного згасання |
 | `max_spread_rate` | Макс. приріст `burning[t]-burning[t-1]` | `>=0` | гірше | Найагресивніше “розкручування” |
 | `peak_fire_fraction` | `peak_fire_size / initial_tree_cells` | `0..1` | гірше | Нормалізований пік для порівнянь |
-| `auc_normalized` | `auc / (initial_tree_cells * time_horizon)` | `0..1` | гірше | Порівняння прогонів різного масштабу |
+| `auc_normalized` | `auc / (initial_tree_cells * len(burning_cells_t))` (t0 включено) | `0..1` | гірше | Порівняння прогонів різного масштабу |
 | `critical` | `baf >= critical_baf_threshold` | bool | гірше | Швидкий бінарний індикатор ризику |
 | `risk_score_mean` | Середній композитний ризик по сценарію: середнє з `baf`, `auc_normalized`, `peak_fire_fraction`, `time_to_extinguish_global_norm` | `0..1` | гірше | Узагальнений рейтинг ризику між сценаріями |
 | `risk_score_mean_uncensored` | Те саме, але лише для прогонів без `truncated_by_max_steps=True` | `0..1` | гірше | Стабільніше порівняння, якщо є багато цензурованих прогонів |
@@ -22,7 +22,7 @@
 ### Важливо: `auc` vs `auc_normalized`
 
 - `auc` — абсолютна величина (залежить від розміру лісу і тривалості).
-- `auc_normalized` — частка від умовного максимуму (зручно порівнювати різні розміри/горизонти часу).
+- `auc_normalized` — частка від умовного максимуму за єдиною часовою конвенцією: рахуємо по часових точках `t0..tT` (тобто `len(burning_cells_t)`), а не по інтервалах між ними.
 
 ### Важливо: all vs uncensored
 
@@ -68,9 +68,9 @@
 | `scenario` | Назва сценарію |
 | `seed` | Зерно випадковості конкретного прогону |
 | `steps_total` | Фактично виконані кроки |
-| `steps_total_or_fire_horizon` | Нормалізатор часу для `auc_normalized` |
+| `steps_total_or_fire_horizon` | Нормалізатор часу для `auc_normalized` у часових точках (`t0..tT`) |
 | `initial_tree_cells` | Початкова кількість дерев |
-| `auc_normalization_denominator` | `initial_tree_cells * steps_total_or_fire_horizon` |
+| `auc_normalization_denominator` | `initial_tree_cells * len(burning_cells_t)` (або `* steps_total_or_fire_horizon`, якщо задано фіксований горизонт у тих самих одиницях) |
 | `truncated_by_max_steps` | Чи був прогін примусово зупинений лімітом `max_steps` |
 
 ---

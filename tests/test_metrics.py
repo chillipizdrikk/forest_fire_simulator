@@ -149,10 +149,10 @@ def test_calculate_derived_metrics_includes_critical_and_steps_total() -> None:
         "max_spread_rate": 3,
         "initial_tree_cells": 10,
         "steps_total": 3,
-        "steps_total_or_fire_horizon": 3,
+        "steps_total_or_fire_horizon": 4,
         "peak_fire_fraction": 0.4,
-        "auc_normalization_denominator": 30,
-        "auc_normalized": 1 / 6,
+        "auc_normalization_denominator": 40,
+        "auc_normalized": 1 / 8,
         "critical": True,
     }
 
@@ -218,3 +218,29 @@ def test_metrics_to_json_produces_stable_structure_with_new_payload_fields() -> 
     assert decoded["seed"] == 42
     assert decoded["step_count"] == 3
     assert decoded["config_snapshot"] == {"humidity": 0.25, "wind_enabled": True}
+
+
+def test_auc_normalized_boundary_is_zero_when_auc_is_zero() -> None:
+    result = calculate_derived_metrics(
+        burning_cells=[0, 0, 0],
+        step_count=2,
+        initial_tree_cells=10,
+        critical_baf_threshold=0.5,
+        baf=0.0,
+    )
+
+    assert result["auc_normalization_denominator"] == 30
+    assert result["auc_normalized"] == 0.0
+
+
+def test_auc_normalized_boundary_is_one_for_max_possible_auc_with_t0_convention() -> None:
+    result = calculate_derived_metrics(
+        burning_cells=[5, 5, 5, 5],
+        step_count=3,
+        initial_tree_cells=5,
+        critical_baf_threshold=0.5,
+        baf=1.0,
+    )
+
+    assert result["auc_normalization_denominator"] == 20
+    assert result["auc_normalized"] == 1.0

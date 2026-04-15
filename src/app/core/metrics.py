@@ -89,17 +89,25 @@ def calculate_derived_metrics(
 ) -> dict[str, int | float | bool]:
     trees_total = max(0, int(initial_tree_cells))
     steps_total = max(0, int(step_count))
-    steps_normalizer = max(0, int(steps_total_or_fire_horizon if steps_total_or_fire_horizon is not None else steps_total))
+    time_points_total = len(_clean_burning_series(burning_cells))
+    time_points_normalizer = max(
+        0,
+        int(
+            steps_total_or_fire_horizon
+            if steps_total_or_fire_horizon is not None
+            else time_points_total
+        ),
+    )
     peak_size = peak_fire_size(burning_cells)
     auc = area_under_curve(burning_cells)
-    auc_denominator = trees_total * steps_normalizer
+    auc_denominator = trees_total * time_points_normalizer
 
     return {
         "time_to_extinguish": time_to_extinguish(burning_cells),
         "max_spread_rate": max_spread_rate(burning_cells),
         "initial_tree_cells": trees_total,
         "steps_total": steps_total,
-        "steps_total_or_fire_horizon": steps_normalizer,
+        "steps_total_or_fire_horizon": time_points_normalizer,
         "peak_fire_fraction": float(peak_size / trees_total) if trees_total > 0 else 0.0,
         "auc_normalization_denominator": int(auc_denominator),
         "auc_normalized": float(auc / auc_denominator) if auc_denominator > 0 else 0.0,
