@@ -10,6 +10,7 @@ from src.app.experiments.analysis import (
     _sort_correlations,
     _parse_ofat_scenario_name,
     _save_plots,
+    generate_report,
     analyze_results,
 )
 
@@ -100,6 +101,162 @@ def test_analysis_includes_all_uncensored_and_quantiles() -> None:
     assert stats["baf_p50"] == pytest.approx(0.5)
     assert stats["baf_p75"] == pytest.approx(0.7)
     assert stats["baf_p95"] == pytest.approx(0.86)
+
+
+def test_analysis_includes_tte_survival_metrics_with_right_censoring() -> None:
+    rows = [
+        {
+            "scenario": "s-surv",
+            "run_id": "r1",
+            "baf": 0.3,
+            "auc_normalized": 0.2,
+            "time_to_extinguish": 100,
+            "critical": False,
+            "truncated_by_max_steps": False,
+            "peak_fire_size": 1,
+            "auc": 1,
+            "peak_fire_fraction": 0.1,
+            "max_spread_rate": 1.0,
+            "fire_duration": 8,
+        },
+        {
+            "scenario": "s-surv",
+            "run_id": "r2",
+            "baf": 0.4,
+            "auc_normalized": 0.3,
+            "time_to_extinguish": 200,
+            "critical": False,
+            "truncated_by_max_steps": False,
+            "peak_fire_size": 1,
+            "auc": 1,
+            "peak_fire_fraction": 0.1,
+            "max_spread_rate": 1.0,
+            "fire_duration": 8,
+        },
+        {
+            "scenario": "s-surv",
+            "run_id": "r3",
+            "baf": 0.5,
+            "auc_normalized": 0.4,
+            "time_to_extinguish": 300,
+            "critical": False,
+            "truncated_by_max_steps": True,
+            "peak_fire_size": 1,
+            "auc": 1,
+            "peak_fire_fraction": 0.1,
+            "max_spread_rate": 1.0,
+            "fire_duration": 8,
+        },
+    ]
+
+    summary = analyze_results(rows)
+    overall = summary.overall
+    stats = summary.by_scenario["s-surv"]
+
+    assert overall["time_to_extinguish_survival_median_reached"] is True
+    assert overall["time_to_extinguish_survival_median"] == pytest.approx(200.0)
+    assert overall["time_to_extinguish_survival_median_lower_bound"] == pytest.approx(300.0)
+    assert overall["time_to_extinguish_survival_probabilities"]["200"] == pytest.approx(1.0 / 3.0)
+
+    assert stats["time_to_extinguish_survival_median_reached"] is True
+    assert stats["time_to_extinguish_survival_median"] == pytest.approx(200.0)
+    assert stats["time_to_extinguish_survival_probabilities"]["200"] == pytest.approx(1.0 / 3.0)
+
+
+def test_analysis_survival_median_uses_lower_bound_when_not_reached() -> None:
+    rows = [
+        {
+            "scenario": "s-lb",
+            "run_id": "r1",
+            "baf": 0.3,
+            "auc_normalized": 0.2,
+            "time_to_extinguish": 100,
+            "critical": False,
+            "truncated_by_max_steps": False,
+            "peak_fire_size": 1,
+            "auc": 1,
+            "peak_fire_fraction": 0.1,
+            "max_spread_rate": 1.0,
+            "fire_duration": 8,
+        },
+        {
+            "scenario": "s-lb",
+            "run_id": "r2",
+            "baf": 0.4,
+            "auc_normalized": 0.3,
+            "time_to_extinguish": 220,
+            "critical": False,
+            "truncated_by_max_steps": True,
+            "peak_fire_size": 1,
+            "auc": 1,
+            "peak_fire_fraction": 0.1,
+            "max_spread_rate": 1.0,
+            "fire_duration": 8,
+        },
+        {
+            "scenario": "s-lb",
+            "run_id": "r3",
+            "baf": 0.5,
+            "auc_normalized": 0.4,
+            "time_to_extinguish": 300,
+            "critical": False,
+            "truncated_by_max_steps": True,
+            "peak_fire_size": 1,
+            "auc": 1,
+            "peak_fire_fraction": 0.1,
+            "max_spread_rate": 1.0,
+            "fire_duration": 8,
+        },
+    ]
+
+    summary = analyze_results(rows)
+
+    assert summary.overall["time_to_extinguish_survival_median_reached"] is False
+    assert summary.overall["time_to_extinguish_survival_median"] == pytest.approx(300.0)
+    assert summary.overall["time_to_extinguish_survival_median_lower_bound"] == pytest.approx(300.0)
+
+
+def test_generate_report_includes_survival_time_section(tmp_path: Path) -> None:
+    rows = [
+        {
+            "scenario": "a",
+            "run_id": "a-1",
+            "baf": 0.2,
+            "auc_normalized": 0.1,
+            "time_to_extinguish": 120,
+            "critical": False,
+            "truncated_by_max_steps": False,
+            "peak_fire_size": 1,
+            "auc": 1,
+            "peak_fire_fraction": 0.1,
+            "max_spread_rate": 1.0,
+            "fire_duration": 3,
+        },
+        {
+            "scenario": "a",
+            "run_id": "a-2",
+            "baf": 0.3,
+            "auc_normalized": 0.2,
+            "time_to_extinguish": 260,
+            "critical": False,
+            "truncated_by_max_steps": True,
+            "peak_fire_size": 1,
+            "auc": 1,
+            "peak_fire_fraction": 0.1,
+            "max_spread_rate": 1.0,
+            "fire_duration": 4,
+        },
+    ]
+    summary = analyze_results(rows)
+    md_path, html_path, _ = generate_report(rows, summary, tmp_path)
+
+    md_text = md_path.read_text(encoding="utf-8")
+    html_text = html_path.read_text(encoding="utf-8")
+
+    assert "Time-to-extinguish survival KPI (right-censored by max_steps)" in md_text
+    assert "Overall P(TTE > 200)" in md_text
+    assert "Time-to-extinguish survival KPI (right-censored by max_steps)" in html_text
+    assert "Overall P(TTE &gt; 200)" in html_text
 
 
 def test_analysis_includes_family_level_sensitivity_for_ofat_variants() -> None:

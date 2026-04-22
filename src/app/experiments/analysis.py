@@ -259,6 +259,70 @@ def _mean_metric(rows: list[dict[str, Any]], key: str) -> float:
     return float(mean(values)) if values else 0.0
 
 
+def _kaplan_meier_tte_metrics(
+    rows: list[dict[str, Any]],
+    *,
+    horizons: tuple[float, ...] = (200.0,),
+) -> dict[str, Any]:
+    observations = [
+        (
+            float(row.get("time_to_extinguish", 0.0)),
+            not bool(row.get("truncated_by_max_steps", False)),
+        )
+        for row in rows
+        if not bool(row.get("no_ignition", False))
+    ]
+    if not observations:
+        return {
+            "tte_survival_sample_size": 0,
+            "time_to_extinguish_survival_median": 0.0,
+            "time_to_extinguish_survival_median_reached": False,
+            "time_to_extinguish_survival_median_lower_bound": 0.0,
+            "time_to_extinguish_survival_probabilities": {str(int(h)): 0.0 for h in horizons},
+        }
+
+    by_time: dict[float, dict[str, int]] = {}
+    for time_value, is_event in observations:
+        bucket = by_time.setdefault(time_value, {"events": 0, "censored": 0})
+        if is_event:
+            bucket["events"] += 1
+        else:
+            bucket["censored"] += 1
+
+    n_at_risk = len(observations)
+    survival = 1.0
+    survival_after_event_time: dict[float, float] = {}
+    median_time: float | None = None
+    for time_value in sorted(by_time.keys()):
+        events = by_time[time_value]["events"]
+        censored = by_time[time_value]["censored"]
+        if n_at_risk > 0 and events > 0:
+            survival *= max(0.0, 1.0 - float(events / n_at_risk))
+            survival_after_event_time[time_value] = survival
+            if median_time is None and survival <= 0.5:
+                median_time = time_value
+        n_at_risk -= events + censored
+
+    max_observed_time = max(time_value for time_value, _ in observations)
+    survival_probabilities: dict[str, float] = {}
+    event_times = sorted(survival_after_event_time.keys())
+    for horizon in horizons:
+        horizon_survival = 1.0
+        for event_time in event_times:
+            if event_time > horizon:
+                break
+            horizon_survival = survival_after_event_time[event_time]
+        survival_probabilities[str(int(horizon))] = float(_clamp_01(horizon_survival))
+
+    return {
+        "tte_survival_sample_size": len(observations),
+        "time_to_extinguish_survival_median": float(median_time if median_time is not None else max_observed_time),
+        "time_to_extinguish_survival_median_reached": bool(median_time is not None),
+        "time_to_extinguish_survival_median_lower_bound": float(max_observed_time),
+        "time_to_extinguish_survival_probabilities": survival_probabilities,
+    }
+
+
 def _critical_share(rows: list[dict[str, Any]]) -> float:
     return float(sum(bool(row.get("critical", False)) for row in rows) / len(rows)) if rows else 0.0
 
@@ -493,6 +557,7 @@ def analyze_results(
     scenario_correlation_min_runs: int = 5,
     significance_permutations: int = 2000,
 ) -> AnalysisSummary:
+    tte_survival_horizons = (200.0,)
     working_rows = [dict(row) for row in rows]
     ignited_rows = _ignited_rows(working_rows)
 
@@ -572,6 +637,7 @@ def analyze_results(
         "time_to_extinguish_global_min": tte_min,
         "time_to_extinguish_global_max": tte_max,
     }
+    overall.update(_kaplan_meier_tte_metrics(working_rows, horizons=tte_survival_horizons))
 
     scenario_stats: dict[str, dict[str, Any]] = {}
     for scenario_name, items in by_scenario.items():
@@ -654,6 +720,7 @@ def analyze_results(
             "no_ignition_count": int(sum(bool(item.get("no_ignition", False)) for item in items)),
             "no_ignition_share": float(sum(bool(item.get("no_ignition", False)) for item in items) / len(items)),
         }
+        scenario_stats[scenario_name].update(_kaplan_meier_tte_metrics(items, horizons=tte_survival_horizons))
 
     ranking = sorted(
         ((name, float(stats.get(ranking_metric, 0.0))) for name, stats in scenario_stats.items()),
@@ -1371,6 +1438,21 @@ def generate_report(
         if float(stats.get("censored_share", 0.0)) >= 0.06
     ]
     elevated_censoring.sort(key=lambda item: item[1], reverse=True)
+    overall_surv_probs = dict(summary.overall.get("time_to_extinguish_survival_probabilities", {}))
+    horizon_200_key = "200"
+    top_persistent_by_200 = sorted(
+        (
+            (
+                name,
+                float(stats.get("time_to_extinguish_survival_probabilities", {}).get(horizon_200_key, 0.0)),
+                float(stats.get("time_to_extinguish_survival_median", 0.0)),
+                bool(stats.get("time_to_extinguish_survival_median_reached", False)),
+            )
+            for name, stats in summary.by_scenario.items()
+        ),
+        key=lambda item: item[1],
+        reverse=True,
+    )[:3]
 
     md_path = output_dir / "summary.md"
     html_path = output_dir / "summary.html"
@@ -1391,6 +1473,15 @@ def generate_report(
         (
             "- Mean time_to_extinguish (all / uncensored): "
             f"{summary.overall['time_to_extinguish_mean_all']:.4f} / {summary.overall['time_to_extinguish_mean_uncensored']:.4f}"
+        ),
+        (
+            "- Survival median time_to_extinguish (KM, right-censored by max_steps): "
+            f"{summary.overall['time_to_extinguish_survival_median']:.4f} "
+            f"(reached={summary.overall['time_to_extinguish_survival_median_reached']})"
+        ),
+        (
+            "- Survival probability P(TTE > 200): "
+            f"{float(overall_surv_probs.get('200', 0.0)):.4f}"
         ),
         (
             "- Critical share (all / uncensored): "
@@ -1492,6 +1583,23 @@ def generate_report(
         )
         for name, share in elevated_censoring:
             md_lines.append(f"- {name}: censored_share={share:.4f}")
+    md_lines.append("### Time-to-extinguish survival KPI (right-censored by max_steps)")
+    md_lines.append(
+        "- Interpret time via survival metrics (KM): median reflects extinction-time distribution robustly under censoring."
+    )
+    md_lines.append(
+        f"- Overall median TTE: {summary.overall['time_to_extinguish_survival_median']:.4f} "
+        f"(reached={summary.overall['time_to_extinguish_survival_median_reached']}, "
+        f"lower_bound={summary.overall['time_to_extinguish_survival_median_lower_bound']:.4f})"
+    )
+    md_lines.append(
+        f"- Overall P(TTE > 200): {float(overall_surv_probs.get('200', 0.0)):.4f}"
+    )
+    md_lines.append("- Highest persistence scenarios by P(TTE > 200):")
+    for name, surv_200, median_tte, median_reached in top_persistent_by_200:
+        md_lines.append(
+            f"- {name}: P(TTE>200)={surv_200:.4f}, median={median_tte:.4f} (reached={median_reached})"
+        )
     md_lines.append("### Mean burned area fraction (95% bootstrap CI)")
     for name, baf_mean, ci_low, ci_high in top_worst_abs_baf_with_ci:
         md_lines.append(f"- {name}: {baf_mean:.4f} (95% CI: {ci_low:.4f}..{ci_high:.4f})")
@@ -1731,6 +1839,15 @@ def generate_report(
             f"{summary.overall['time_to_extinguish_mean_uncensored']:.4f}</li>"
         ),
         (
+            "<li>Survival median time_to_extinguish (KM, right-censored by max_steps): "
+            f"{summary.overall['time_to_extinguish_survival_median']:.4f} "
+            f"(reached={summary.overall['time_to_extinguish_survival_median_reached']})</li>"
+        ),
+        (
+            "<li>Survival probability P(TTE &gt; 200): "
+            f"{float(overall_surv_probs.get('200', 0.0)):.4f}</li>"
+        ),
+        (
             "<li>Critical share (all / uncensored): "
             f"{summary.overall['critical_mean_all']:.4f} / {summary.overall['critical_mean_uncensored']:.4f}</li>"
         ),
@@ -1835,6 +1952,26 @@ def generate_report(
         for name, share in elevated_censoring:
             html_lines.append(f"<li>{name}: censored_share={share:.4f}</li>")
         html_lines.append("</ul>")
+    html_lines.append("<h3>Time-to-extinguish survival KPI (right-censored by max_steps)</h3><ul>")
+    html_lines.append(
+        "<li>Interpret time via survival metrics (KM): median reflects extinction-time distribution robustly under censoring.</li>"
+    )
+    html_lines.append(
+        "<li>Overall median TTE: "
+        f"{summary.overall['time_to_extinguish_survival_median']:.4f} "
+        f"(reached={summary.overall['time_to_extinguish_survival_median_reached']}, "
+        f"lower_bound={summary.overall['time_to_extinguish_survival_median_lower_bound']:.4f})</li>"
+    )
+    html_lines.append(
+        "<li>Overall P(TTE &gt; 200): "
+        f"{float(overall_surv_probs.get('200', 0.0)):.4f}</li>"
+    )
+    html_lines.append("<li>Highest persistence scenarios by P(TTE &gt; 200):</li><ul>")
+    for name, surv_200, median_tte, median_reached in top_persistent_by_200:
+        html_lines.append(
+            f"<li>{name}: P(TTE&gt;200)={surv_200:.4f}, median={median_tte:.4f} (reached={median_reached})</li>"
+        )
+    html_lines.append("</ul></ul>")
     html_lines.append("<h3>Mean burned area fraction (95% bootstrap CI)</h3><ol>")
     for name, baf_mean, ci_low, ci_high in top_worst_abs_baf_with_ci:
         html_lines.append(f"<li>{name}: {baf_mean:.4f} (95% CI: {ci_low:.4f}..{ci_high:.4f})</li>")
