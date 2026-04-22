@@ -906,7 +906,7 @@ def _collect_binary_param_effects(
 
 
 def _parse_ofat_scenario_name(name: str) -> tuple[str, str, float] | None:
-    """Parse OFAT names '<base>_<param>_<value_token>' with humidity encoded as percent."""
+    """Parse OFAT names '<base>_<param>_<value_token>' with per-parameter token scaling."""
     match = re.fullmatch(
         r"(?P<base>.+)_(?P<param>humidity|wind_strength|temperature_c)_(?P<value_token>\d+)",
         name,
@@ -922,7 +922,12 @@ def _parse_ofat_scenario_name(name: str) -> tuple[str, str, float] | None:
     except ValueError:
         return None
 
-    value = numeric_value / 100.0 if param_name == "humidity" else numeric_value
+    if param_name == "humidity":
+        value = numeric_value / 100.0
+    elif param_name == "wind_strength":
+        value = numeric_value / 10.0
+    else:
+        value = numeric_value
     return base_name, param_name, value
 
 
