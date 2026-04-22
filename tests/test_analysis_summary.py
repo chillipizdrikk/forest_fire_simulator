@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from src.app.experiments.analysis import _parse_ofat_scenario_name, _save_plots, analyze_results
+from src.app.experiments.analysis import (
+    _collect_top_correlations,
+    _sort_correlations,
+    _parse_ofat_scenario_name,
+    _save_plots,
+    analyze_results,
+)
 
 
 def test_analyze_results_does_not_mutate_input_rows() -> None:
@@ -189,10 +195,10 @@ def test_analysis_includes_family_level_sensitivity_for_ofat_variants() -> None:
     family_diag = summary.correlations_by_family_diagnostics["anchor_mid_windy_rain / humidity"]
     assert family_diag["non_constant_param_count"] == 1
     family_corr = summary.correlations_by_family["anchor_mid_windy_rain / humidity"]
-    humidity_baf = [item for item in family_corr if item[0] == "param_humidity" and item[1] == "baf"]
+    humidity_baf = [item for item in family_corr if item["param_key"] == "param_humidity" and item["metric_key"] == "baf"]
     assert humidity_baf
-    assert humidity_baf[0][2] < 0.0
-    assert humidity_baf[0][5] < 0.0
+    assert float(humidity_baf[0]["r"]) < 0.0
+    assert float(humidity_baf[0]["slope"]) < 0.0
 
 
 def test_analysis_separates_ofat_axes_in_family_level_sensitivity() -> None:
@@ -286,14 +292,14 @@ def test_analysis_separates_ofat_axes_in_family_level_sensitivity() -> None:
     assert wind_axis_name in summary.correlations_by_family
 
     humidity_corr = summary.correlations_by_family[humidity_axis_name]
-    assert {item[0] for item in humidity_corr} == {"param_humidity"}
-    humidity_baf_corr = next(item for item in humidity_corr if item[1] == "baf")
-    assert humidity_baf_corr[2] < 0.0
+    assert {str(item["param_key"]) for item in humidity_corr} == {"param_humidity"}
+    humidity_baf_corr = next(item for item in humidity_corr if item["metric_key"] == "baf")
+    assert float(humidity_baf_corr["r"]) < 0.0
 
     wind_corr = summary.correlations_by_family[wind_axis_name]
-    assert {item[0] for item in wind_corr} == {"param_wind_strength"}
-    wind_baf_corr = next(item for item in wind_corr if item[1] == "baf")
-    assert wind_baf_corr[2] > 0.0
+    assert {str(item["param_key"]) for item in wind_corr} == {"param_wind_strength"}
+    wind_baf_corr = next(item for item in wind_corr if item["metric_key"] == "baf")
+    assert float(wind_baf_corr["r"]) > 0.0
 
 
 @pytest.mark.parametrize(
@@ -427,7 +433,7 @@ def test_bool_params_are_excluded_from_continuous_correlations() -> None:
     summary = analyze_results(rows, correlation_top_n=20)
 
     assert summary.continuous_param_correlations
-    assert all(pkey != "param_use_barrier" for pkey, *_ in summary.continuous_param_correlations)
+    assert all(item["param_key"] != "param_use_barrier" for item in summary.continuous_param_correlations)
     assert any(pkey == "param_use_barrier" for pkey, *_ in summary.binary_param_effects)
 
 
@@ -602,3 +608,58 @@ def test_analysis_aggregates_and_ranks_new_spatial_metrics() -> None:
     assert summary.overall["ranking_by_burned_components_mean"][0][0] == "s1"
     assert summary.overall["ranking_by_shape_complexity_mean"][0][0] == "s1"
     assert summary.overall["ranking_by_largest_cluster_share_mean"][0][0] == "s2"
+
+
+def test_collect_top_correlations_adds_bh_q_values() -> None:
+    rows = []
+    for idx in range(1, 31):
+        rows.append(
+            {
+                "scenario": "s1" if idx % 2 else "s2",
+                "param_alpha": float(idx),
+                "param_beta": float(31 - idx),
+                "baf": float(idx) / 30.0,
+                "auc_normalized": float(idx) / 30.0,
+            }
+        )
+
+    correlations = _collect_top_correlations(
+        rows,
+        numeric_param_keys=["param_alpha", "param_beta"],
+        metric_keys=["baf", "auc_normalized"],
+        top_n=10,
+    )
+
+    assert correlations
+    assert all("p_value" in item for item in correlations)
+    assert all("q_value" in item for item in correlations)
+    assert all(float(item["q_value"]) >= float(item["p_value"]) for item in correlations)
+    assert any(bool(item["q_le_005"]) for item in correlations)
+
+
+def test_sort_correlations_is_stable_for_tied_statistics() -> None:
+    tied = [
+        {
+            "param_key": "param_a",
+            "metric_key": "baf",
+            "r": 0.5,
+            "r_ci_low": 0.2,
+            "r_ci_high": 0.7,
+            "p_value": 0.01,
+            "q_value": 0.02,
+            "q_le_005": True,
+        },
+        {
+            "param_key": "param_b",
+            "metric_key": "baf",
+            "r": 0.5,
+            "r_ci_low": 0.2,
+            "r_ci_high": 0.7,
+            "p_value": 0.01,
+            "q_value": 0.02,
+            "q_le_005": True,
+        },
+    ]
+
+    ranked = _sort_correlations(tied, ranking_mode="q_then_abs_r", top_n=2)
+    assert [item["param_key"] for item in ranked] == ["param_a", "param_b"]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import combinations
+import math
 from pathlib import Path
 from random import Random
 import re
@@ -14,14 +15,14 @@ class AnalysisSummary:
     overall: dict[str, Any]
     by_scenario: dict[str, dict[str, Any]]
     scenario_ranking: list[tuple[str, float]]
-    continuous_param_correlations: list[tuple[str, str, float, float, float]]
-    continuous_param_correlations_controlled: list[tuple[str, str, float, float, float]]
+    continuous_param_correlations: list[dict[str, float | str | bool]]
+    continuous_param_correlations_controlled: list[dict[str, float | str | bool]]
     binary_param_effects: list[tuple[str, str, float, float, float, float]]
-    correlations: list[tuple[str, str, float, float, float]]
-    controlled_correlations: list[tuple[str, str, float, float, float]]
-    correlations_by_scenario: dict[str, list[tuple[str, str, float, float, float]]]
+    correlations: list[dict[str, float | str | bool]]
+    controlled_correlations: list[dict[str, float | str | bool]]
+    correlations_by_scenario: dict[str, list[dict[str, float | str | bool]]]
     correlations_by_scenario_diagnostics: dict[str, dict[str, Any]]
-    correlations_by_family: dict[str, list[tuple[str, str, float, float, float, float, float, float]]]
+    correlations_by_family: dict[str, list[dict[str, float | str | bool]]]
     correlations_by_family_diagnostics: dict[str, dict[str, Any]]
     scenario_pairwise_significance: dict[str, list[dict[str, Any]]]
     interaction_surfaces: list[dict[str, Any]]
@@ -82,6 +83,62 @@ def _pearson_corr(xs: list[float], ys: list[float]) -> float | None:
         return None
     cov = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys)) / len(xs)
     return float(cov / (x_std * y_std))
+
+
+def _pearson_p_value(xs: list[float], ys: list[float], corr: float) -> float:
+    n = len(xs)
+    if n != len(ys) or n < 3:
+        return 1.0
+    abs_corr = abs(float(corr))
+    if abs_corr >= 1.0:
+        return 0.0
+    denom = 1.0 - (abs_corr**2)
+    if denom <= 0.0:
+        return 0.0
+    t_stat = abs_corr * ((n - 2) / denom) ** 0.5
+    # Normal approximation of two-sided p-value for Student's t.
+    # Stable for ranking reliability, and avoids optional heavy dependencies.
+    return float(_clamp_01(math.erfc(t_stat / math.sqrt(2.0))))
+
+
+def _format_p_value(value: float) -> str:
+    if value < 0.0001:
+        return "<1e-4"
+    return f"{value:.4f}"
+
+
+def _correlation_sort_key(row: dict[str, float | str | bool], mode: str) -> tuple[float, ...]:
+    r_abs = abs(float(row["r"]))
+    q_value = float(row["q_value"])
+    p_value = float(row["p_value"])
+    if mode == "q_then_abs_r":
+        return (q_value, p_value, -r_abs)
+    if mode == "p_then_abs_r":
+        return (p_value, q_value, -r_abs)
+    return (-r_abs, q_value, p_value)
+
+
+def _sort_correlations(
+    rows: list[dict[str, float | str | bool]],
+    *,
+    ranking_mode: str,
+    top_n: int,
+) -> list[dict[str, float | str | bool]]:
+    ordered = sorted(rows, key=lambda row: _correlation_sort_key(row, ranking_mode))
+    return ordered[:top_n]
+
+
+def _attach_bh_q_values(rows: list[dict[str, float | str | bool]]) -> list[dict[str, float | str | bool]]:
+    if not rows:
+        return []
+    q_values = _benjamini_hochberg([float(row["p_value"]) for row in rows])
+    enriched: list[dict[str, float | str | bool]] = []
+    for row, q_value in zip(rows, q_values):
+        next_row = dict(row)
+        next_row["q_value"] = float(q_value)
+        next_row["q_le_005"] = bool(q_value <= 0.05)
+        enriched.append(next_row)
+    return enriched
 
 
 def _bootstrap_corr_ci(
@@ -316,12 +373,18 @@ def _pairwise_significance_by_metric(
 
 
 def _select_top_baf_params(
-    continuous_correlations: list[tuple[str, str, float, float, float]],
+    continuous_correlations: list[dict[str, float | str | bool]],
     *,
     top_k: int = 2,
 ) -> list[str]:
     selected: list[str] = []
-    for pkey, mkey, corr, *_ in sorted(continuous_correlations, key=lambda item: abs(item[2]), reverse=True):
+    ranked = sorted(
+        continuous_correlations,
+        key=lambda item: _correlation_sort_key(item, "q_then_abs_r"),
+    )
+    for item in ranked:
+        pkey = str(item["param_key"])
+        mkey = str(item["metric_key"])
         if mkey != "baf":
             continue
         if pkey in selected:
@@ -698,7 +761,7 @@ def analyze_results(
         overall["interaction_surface_primary_coverage"] = float(primary_surface["cell_coverage"])
         overall["interaction_surface_primary_score_baf"] = float(primary_surface["interaction_score_baf"])
 
-    correlations_by_scenario: dict[str, list[tuple[str, str, float, float, float]]] = {}
+    correlations_by_scenario: dict[str, list[dict[str, float | str | bool]]] = {}
     correlations_by_scenario_diagnostics: dict[str, dict[str, Any]] = {}
     for scenario_name, scenario_rows in by_scenario.items():
         non_constant_params = _count_non_constant_params(scenario_rows, continuous_param_keys)
@@ -731,7 +794,7 @@ def analyze_results(
             non_ofat_family_rows.setdefault(scenario_name, []).append(row)
 
     family_metric_keys = ["baf", "auc_normalized", "time_to_extinguish"]
-    correlations_by_family: dict[str, list[tuple[str, str, float, float, float, float, float, float]]] = {}
+    correlations_by_family: dict[str, list[dict[str, float | str | bool]]] = {}
     correlations_by_family_diagnostics: dict[str, dict[str, Any]] = {}
     for (base_name, varied_param_name), items in family_rows.items():
         family_name = f"{base_name} / {varied_param_name}"
@@ -750,7 +813,8 @@ def analyze_results(
         if len(items) < scenario_correlation_min_runs:
             continue
 
-        family_corrs: list[tuple[str, str, float, float, float, float, float, float]] = []
+        family_corrs: list[dict[str, float | str | bool]] = []
+        family_test_rows: list[tuple[int, float]] = []
         for pkey in non_constant_params:
             px = [float(row.get(pkey, 0.0)) for row in items]
             for mkey in family_metric_keys:
@@ -761,12 +825,30 @@ def analyze_results(
                     continue
                 corr_ci_low, corr_ci_high = _bootstrap_corr_ci(px, my, confidence=0.95, n_resamples=1000)
                 slope_ci_low, slope_ci_high = _bootstrap_slope_ci(px, my, confidence=0.95, n_resamples=1000)
+                p_value = _pearson_p_value(px, my, corr)
+                row_idx = len(family_corrs)
                 family_corrs.append(
-                    (pkey, mkey, corr, corr_ci_low, corr_ci_high, slope, slope_ci_low, slope_ci_high)
+                    {
+                        "param_key": pkey,
+                        "metric_key": mkey,
+                        "r": float(corr),
+                        "r_ci_low": float(corr_ci_low),
+                        "r_ci_high": float(corr_ci_high),
+                        "p_value": float(p_value),
+                        "slope": float(slope),
+                        "slope_ci_low": float(slope_ci_low),
+                        "slope_ci_high": float(slope_ci_high),
+                    }
                 )
-        family_corrs.sort(key=lambda item: abs(item[2]), reverse=True)
+                family_test_rows.append((row_idx, p_value))
         if family_corrs:
-            correlations_by_family[family_name] = family_corrs[:correlation_top_n]
+            q_values = _benjamini_hochberg([item[1] for item in family_test_rows])
+            for (row_idx, _), q_value in zip(family_test_rows, q_values):
+                family_corrs[row_idx]["q_value"] = float(q_value)
+                family_corrs[row_idx]["q_le_005"] = bool(q_value <= 0.05)
+        family_corrs = _sort_correlations(family_corrs, ranking_mode="q_then_abs_r", top_n=correlation_top_n)
+        if family_corrs:
+            correlations_by_family[family_name] = family_corrs
 
     for scenario_name, items in non_ofat_family_rows.items():
         correlations_by_family_diagnostics[scenario_name] = {
@@ -802,8 +884,8 @@ def _collect_top_correlations(
     metric_keys: list[str],
     *,
     top_n: int,
-) -> list[tuple[str, str, float, float, float]]:
-    correlations: list[tuple[str, str, float, float, float]] = []
+) -> list[dict[str, float | str | bool]]:
+    correlations: list[dict[str, float | str | bool]] = []
     for pkey in numeric_param_keys:
         px = [float(row.get(pkey, 0.0)) for row in rows]
         if not px:
@@ -814,9 +896,19 @@ def _collect_top_correlations(
             if corr is None:
                 continue
             ci_low, ci_high = _bootstrap_corr_ci(px, my, confidence=0.95, n_resamples=1000)
-            correlations.append((pkey, mkey, corr, ci_low, ci_high))
-    correlations.sort(key=lambda item: abs(item[2]), reverse=True)
-    return correlations[:top_n]
+            p_value = _pearson_p_value(px, my, corr)
+            correlations.append(
+                {
+                    "param_key": pkey,
+                    "metric_key": mkey,
+                    "r": float(corr),
+                    "r_ci_low": float(ci_low),
+                    "r_ci_high": float(ci_high),
+                    "p_value": float(p_value),
+                }
+            )
+    correlations = _attach_bh_q_values(correlations)
+    return _sort_correlations(correlations, ranking_mode="q_then_abs_r", top_n=top_n)
 
 
 def _count_non_constant_params(rows: list[dict[str, Any]], numeric_param_keys: list[str]) -> list[str]:
@@ -839,7 +931,7 @@ def _collect_controlled_top_correlations(
     metric_keys: list[str],
     *,
     top_n: int,
-) -> list[tuple[str, str, float, float, float]]:
+) -> list[dict[str, float | str | bool]]:
     scenario_means: dict[str, dict[str, float]] = {}
     keys_for_demean = numeric_param_keys + metric_keys
     for scenario_name, scenario_rows in by_scenario.items():
@@ -848,7 +940,7 @@ def _collect_controlled_top_correlations(
             values = [float(row.get(key, 0.0)) for row in scenario_rows]
             scenario_means[scenario_name][key] = float(mean(values)) if values else 0.0
 
-    correlations: list[tuple[str, str, float, float, float]] = []
+    correlations: list[dict[str, float | str | bool]] = []
     for pkey in numeric_param_keys:
         px = [
             float(row.get(pkey, 0.0)) - scenario_means[str(row["scenario"])][pkey]
@@ -867,10 +959,20 @@ def _collect_controlled_top_correlations(
             if corr is None:
                 continue
             ci_low, ci_high = _bootstrap_corr_ci(px, my, confidence=0.95, n_resamples=1000)
-            correlations.append((pkey, mkey, corr, ci_low, ci_high))
+            p_value = _pearson_p_value(px, my, corr)
+            correlations.append(
+                {
+                    "param_key": pkey,
+                    "metric_key": mkey,
+                    "r": float(corr),
+                    "r_ci_low": float(ci_low),
+                    "r_ci_high": float(ci_high),
+                    "p_value": float(p_value),
+                }
+            )
 
-    correlations.sort(key=lambda item: abs(item[2]), reverse=True)
-    return correlations[:top_n]
+    correlations = _attach_bh_q_values(correlations)
+    return _sort_correlations(correlations, ranking_mode="q_then_abs_r", top_n=top_n)
 
 
 def _collect_binary_param_effects(
@@ -1178,6 +1280,7 @@ def generate_report(
     reports_dir: str | Path,
     *,
     censoring_audit: dict[str, Any] | None = None,
+    sensitivity_ranking: str = "q_then_abs_r",
 ) -> tuple[Path, Path, list[Path]]:
     output_dir = Path(reports_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1247,8 +1350,16 @@ def generate_report(
         key=lambda item: item[1],
         reverse=True,
     )[:3]
-    top_continuous_corr_uncontrolled = summary.continuous_param_correlations[:5]
-    top_continuous_corr_controlled = summary.continuous_param_correlations_controlled[:5]
+    top_continuous_corr_uncontrolled = _sort_correlations(
+        summary.continuous_param_correlations,
+        ranking_mode=sensitivity_ranking,
+        top_n=5,
+    )
+    top_continuous_corr_controlled = _sort_correlations(
+        summary.continuous_param_correlations_controlled,
+        ranking_mode=sensitivity_ranking,
+        top_n=5,
+    )
     top_binary_effects = summary.binary_param_effects[:5]
     top_pairwise_baf = summary.scenario_pairwise_significance.get("baf", [])[:5]
     top_pairwise_auc_norm = summary.scenario_pairwise_significance.get("auc_normalized", [])[:5]
@@ -1436,13 +1547,25 @@ def generate_report(
     md_lines.append("")
     md_lines.append("## continuous_param_correlations (uncontrolled)")
     md_lines.append("- Note: these are global Pearson correlations for continuous params only.")
-    for pkey, mkey, corr, ci_low, ci_high in top_continuous_corr_uncontrolled:
-        md_lines.append(f"- {pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}")
+    for item in top_continuous_corr_uncontrolled:
+        md_lines.append(
+            "- "
+            f"{item['param_key']} vs {item['metric_key']}: "
+            f"r={float(item['r']):.4f}, 95% CI {float(item['r_ci_low']):.4f}..{float(item['r_ci_high']):.4f}, "
+            f"p={_format_p_value(float(item['p_value']))}, q={_format_p_value(float(item['q_value']))}, "
+            f"q<=0.05={bool(item['q_le_005'])}"
+        )
     md_lines.append("")
     md_lines.append("## continuous_param_correlations (controlled by scenario)")
     md_lines.append("- Method: within-scenario demeaning (scenario fixed-effects style).")
-    for pkey, mkey, corr, ci_low, ci_high in top_continuous_corr_controlled:
-        md_lines.append(f"- {pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}")
+    for item in top_continuous_corr_controlled:
+        md_lines.append(
+            "- "
+            f"{item['param_key']} vs {item['metric_key']}: "
+            f"r={float(item['r']):.4f}, 95% CI {float(item['r_ci_low']):.4f}..{float(item['r_ci_high']):.4f}, "
+            f"p={_format_p_value(float(item['p_value']))}, q={_format_p_value(float(item['q_value']))}, "
+            f"q<=0.05={bool(item['q_le_005'])}"
+        )
     md_lines.append("")
     md_lines.append("## binary_param_effects")
     md_lines.append("- For binary params: mean(True)-mean(False), plus point-biserial correlation with 95% CI.")
@@ -1468,8 +1591,14 @@ def generate_report(
                     f"- ⚠️ Correlation is weakly identified: all param_* are constant "
                     f"({runs} runs, varying params: 0/{total_param_count})."
                 )
-            for pkey, mkey, corr, ci_low, ci_high in scenario_corr[:5]:
-                md_lines.append(f"- {pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}")
+            for item in _sort_correlations(scenario_corr, ranking_mode=sensitivity_ranking, top_n=5):
+                md_lines.append(
+                    "- "
+                    f"{item['param_key']} vs {item['metric_key']}: "
+                    f"r={float(item['r']):.4f}, 95% CI {float(item['r_ci_low']):.4f}..{float(item['r_ci_high']):.4f}, "
+                    f"p={_format_p_value(float(item['p_value']))}, q={_format_p_value(float(item['q_value']))}, "
+                    f"q<=0.05={bool(item['q_le_005'])}"
+                )
         else:
             md_lines.append(
                 (
@@ -1505,10 +1634,13 @@ def generate_report(
             md_lines.append("- Excluded: scenario name does not match OFAT naming convention.")
             continue
         if family_corr:
-            for pkey, mkey, corr, corr_ci_low, corr_ci_high, slope, slope_ci_low, slope_ci_high in family_corr[:5]:
+            for item in _sort_correlations(family_corr, ranking_mode=sensitivity_ranking, top_n=5):
                 md_lines.append(
-                    f"- {pkey} vs {mkey}: r={corr:.4f} (95% CI {corr_ci_low:.4f}..{corr_ci_high:.4f}), "
-                    f"slope={slope:.4f} (95% CI {slope_ci_low:.4f}..{slope_ci_high:.4f})"
+                    f"- {item['param_key']} vs {item['metric_key']}: "
+                    f"r={float(item['r']):.4f} (95% CI {float(item['r_ci_low']):.4f}..{float(item['r_ci_high']):.4f}), "
+                    f"p={_format_p_value(float(item['p_value']))}, q={_format_p_value(float(item['q_value']))}, "
+                    f"q<=0.05={bool(item['q_le_005'])}, "
+                    f"slope={float(item['slope']):.4f} (95% CI {float(item['slope_ci_low']):.4f}..{float(item['slope_ci_high']):.4f})"
                 )
         else:
             md_lines.append(
@@ -1757,14 +1889,29 @@ def generate_report(
         )
     html_lines.append("</ul>")
     html_lines.append("<h2>continuous_param_correlations (uncontrolled)</h2>")
-    html_lines.append("<p>Note: these are global Pearson correlations for continuous params only.</p><ul>")
-    for pkey, mkey, corr, ci_low, ci_high in top_continuous_corr_uncontrolled:
-        html_lines.append(f"<li>{pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}</li>")
+    html_lines.append(
+        "<p>Note: global Pearson correlations for continuous params; includes r, CI, p, BH q, and q&lt;=0.05 flag."
+        f" Ranking mode: {sensitivity_ranking}.</p><ul>"
+    )
+    for item in top_continuous_corr_uncontrolled:
+        html_lines.append(
+            "<li>"
+            f"{item['param_key']} vs {item['metric_key']}: "
+            f"r={float(item['r']):.4f}, 95% CI {float(item['r_ci_low']):.4f}..{float(item['r_ci_high']):.4f}, "
+            f"p={_format_p_value(float(item['p_value']))}, q={_format_p_value(float(item['q_value']))}, "
+            f"q&lt;=0.05={bool(item['q_le_005'])}</li>"
+        )
     html_lines.append("</ul>")
     html_lines.append("<h2>continuous_param_correlations (controlled by scenario)</h2>")
-    html_lines.append("<p>Method: within-scenario demeaning (scenario fixed-effects style).</p><ul>")
-    for pkey, mkey, corr, ci_low, ci_high in top_continuous_corr_controlled:
-        html_lines.append(f"<li>{pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}</li>")
+    html_lines.append(f"<p>Method: within-scenario demeaning (scenario fixed-effects style). Ranking mode: {sensitivity_ranking}.</p><ul>")
+    for item in top_continuous_corr_controlled:
+        html_lines.append(
+            "<li>"
+            f"{item['param_key']} vs {item['metric_key']}: "
+            f"r={float(item['r']):.4f}, 95% CI {float(item['r_ci_low']):.4f}..{float(item['r_ci_high']):.4f}, "
+            f"p={_format_p_value(float(item['p_value']))}, q={_format_p_value(float(item['q_value']))}, "
+            f"q&lt;=0.05={bool(item['q_le_005'])}</li>"
+        )
     html_lines.append("</ul>")
     html_lines.append("<h2>binary_param_effects</h2>")
     html_lines.append(
@@ -1793,8 +1940,14 @@ def generate_report(
                     f"({runs} runs, varying params: 0/{total_param_count}).</p>"
                 )
             html_lines.append("<ul>")
-            for pkey, mkey, corr, ci_low, ci_high in scenario_corr[:5]:
-                html_lines.append(f"<li>{pkey} vs {mkey}: r={corr:.4f}, 95% CI {ci_low:.4f}..{ci_high:.4f}</li>")
+            for item in _sort_correlations(scenario_corr, ranking_mode=sensitivity_ranking, top_n=5):
+                html_lines.append(
+                    "<li>"
+                    f"{item['param_key']} vs {item['metric_key']}: "
+                    f"r={float(item['r']):.4f}, 95% CI {float(item['r_ci_low']):.4f}..{float(item['r_ci_high']):.4f}, "
+                    f"p={_format_p_value(float(item['p_value']))}, q={_format_p_value(float(item['q_value']))}, "
+                    f"q&lt;=0.05={bool(item['q_le_005'])}</li>"
+                )
             html_lines.append("</ul>")
         else:
             html_lines.append(
@@ -1833,10 +1986,13 @@ def generate_report(
             continue
         if family_corr:
             html_lines.append("<ul>")
-            for pkey, mkey, corr, corr_ci_low, corr_ci_high, slope, slope_ci_low, slope_ci_high in family_corr[:5]:
+            for item in _sort_correlations(family_corr, ranking_mode=sensitivity_ranking, top_n=5):
                 html_lines.append(
-                    f"<li>{pkey} vs {mkey}: r={corr:.4f} (95% CI {corr_ci_low:.4f}..{corr_ci_high:.4f}), "
-                    f"slope={slope:.4f} (95% CI {slope_ci_low:.4f}..{slope_ci_high:.4f})</li>"
+                    f"<li>{item['param_key']} vs {item['metric_key']}: "
+                    f"r={float(item['r']):.4f} (95% CI {float(item['r_ci_low']):.4f}..{float(item['r_ci_high']):.4f}), "
+                    f"p={_format_p_value(float(item['p_value']))}, q={_format_p_value(float(item['q_value']))}, "
+                    f"q&lt;=0.05={bool(item['q_le_005'])}, "
+                    f"slope={float(item['slope']):.4f} (95% CI {float(item['slope_ci_low']):.4f}..{float(item['slope_ci_high']):.4f})</li>"
                 )
             html_lines.append("</ul>")
         else:
