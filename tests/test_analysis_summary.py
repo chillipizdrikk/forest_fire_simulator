@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
-from src.app.experiments.analysis import _parse_ofat_scenario_name, analyze_results
+from src.app.experiments.analysis import _parse_ofat_scenario_name, _save_plots, analyze_results
 
 
 def test_analyze_results_does_not_mutate_input_rows() -> None:
@@ -308,7 +309,11 @@ def test_analysis_separates_ofat_axes_in_family_level_sensitivity() -> None:
         ),
         (
             "transition_low_humidity_wind_strength_08",
-            ("transition_low_humidity", "wind_strength", 8.0),
+            ("transition_low_humidity", "wind_strength", 0.8),
+        ),
+        (
+            "anchor_mid_windy_rain_wind_strength_04",
+            ("anchor_mid_windy_rain", "wind_strength", 0.4),
         ),
     ],
 )
@@ -316,9 +321,43 @@ def test_parse_ofat_scenario_name_with_nested_underscores(
     name: str,
     expected: tuple[str, str, float],
 ) -> None:
-    # Convention: only humidity uses percent-encoding (_025 -> 0.25), while
-    # wind_strength and temperature_c parse the token as a direct number.
+    # Convention: humidity uses percent-encoding (_025 -> 0.25),
+    # wind_strength uses tenths (_08 -> 0.8), and temperature_c is direct.
     assert _parse_ofat_scenario_name(name) == expected
+
+
+def test_save_plots_uses_normalized_wind_strength_axis_for_ofat_curves(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [
+        {
+            "scenario": "transition_low_humidity_wind_strength_04",
+            "baf": 0.2,
+        },
+        {
+            "scenario": "transition_low_humidity_wind_strength_08",
+            "baf": 0.7,
+        },
+    ]
+
+    captured_xs: list[list[float]] = []
+
+    matplotlib = pytest.importorskip("matplotlib")
+    import matplotlib.axes
+
+    original_plot = matplotlib.axes.Axes.plot
+
+    def _capture_plot(self, x, y, *args, **kwargs):
+        label = kwargs.get("label")
+        if label == "wind_strength":
+            captured_xs.append([float(value) for value in x])
+        return original_plot(self, x, y, *args, **kwargs)
+
+    monkeypatch.setattr(matplotlib.axes.Axes, "plot", _capture_plot)
+
+    generated = _save_plots(rows, tmp_path)
+
+    assert tmp_path.joinpath("scenario_baf_mean_ofat_curves.png") in generated
+    assert captured_xs
+    assert captured_xs[0] == [0.4, 0.8]
 
 
 def test_bool_params_are_excluded_from_continuous_correlations() -> None:
