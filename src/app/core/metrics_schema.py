@@ -57,6 +57,36 @@ RUN_METRICS_SCHEMA: dict[str, MetricDefinition] = {
         interpretation="higher_is_worse",
         scope="core",
     ),
+    "burned_components": MetricDefinition(
+        key="burned_components",
+        formula="кількість 8-зв'язних компонент у бінарній масці вигорілих клітин burnt_mask",
+        units="компоненти",
+        valid_range=">= 0 (ціле)",
+        interpretation="context_dependent",
+        scope="core",
+    ),
+    "largest_cluster_share": MetricDefinition(
+        key="largest_cluster_share",
+        formula=(
+            "largest_component_area / burnt_area, якщо burnt_area > 0, інакше 0.0; "
+            "largest_component_area рахується для найбільшої 8-зв'язної компоненти"
+        ),
+        units="частка [0..1]",
+        valid_range="0.0..1.0",
+        interpretation="context_dependent",
+        scope="core",
+    ),
+    "shape_complexity": MetricDefinition(
+        key="shape_complexity",
+        formula=(
+            "perimeter_4n / burnt_area, якщо burnt_area > 0, інакше 0.0; "
+            "perimeter_4n — кількість відкритих 4-сусідніх ребер у burnt_mask"
+        ),
+        units="безрозмірна (периметр/площа)",
+        valid_range="0.0..4.0",
+        interpretation="higher_is_worse",
+        scope="core",
+    ),
     "peak_fire_fraction": MetricDefinition(
         key="peak_fire_fraction",
         formula="peak_fire_size / initial_tree_cells, якщо initial_tree_cells > 0, інакше 0.0",
