@@ -134,6 +134,7 @@ Result schema includes:
 Контракт **run-level** метрик описано в `src/app/core/metrics_schema.py`.
 Контракт **scenario/overall summary aggregates** описано в `src/app/core/summary_schema.py`.
 Швидка шпаргалка українською: `docs/metrics_cheatsheet_uk.md`.
+Український документ з qualitative / face validation припущень моделі та результатів зі звітів: `docs/model_validation_uk.md`.
 
 Core-метрики (рахуються у `src/app/core/metrics.py`):
 

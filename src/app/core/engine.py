@@ -212,9 +212,21 @@ class ForestFireCA:
         w_norm = (wx * wx + wy * wy) ** 0.5
         dot = (dx * wx + dy * wy) / (d_norm * w_norm)
 
-        s = float(self.cfg.wind_strength)
-        p = 1.0 - s * (1.0 - dot) / 2.0
-        return float(np.clip(p, 0.0, 1.0))
+        # s = float(self.cfg.wind_strength)
+        # p = 1.0 - s * (1.0 - dot) / 2.0
+        # return float(np.clip(p, 0.0, 1.0))
+        
+        s = float(np.clip(self.cfg.wind_strength, 0.0, 1.0))
+        downwind_factor = 1.0 + s
+        crosswind_factor = 1.0 - 0.25 * s
+        upwind_factor = 1.0 - s
+
+        if dot >= 0.0:
+            p = crosswind_factor + dot * (downwind_factor - crosswind_factor)
+        else:
+            p = crosswind_factor + (-dot) * (upwind_factor - crosswind_factor)
+
+        return float(max(p, 0.0))
 
     def _temp_norm(self) -> float:
         t = float(self.cfg.temperature_c)
