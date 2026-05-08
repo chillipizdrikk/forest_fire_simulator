@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QGridLayout, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout
 
+from src.app.core.metrics_schema import metrics_keys
 from src.app.ui.panels.common import create_card
 
 
@@ -24,7 +25,7 @@ def stat_card(value: str, caption: str):
     return card, value_label
 
 
-def build_stats_card(window):
+def build_live_stats_card(window):
     window.stats_card = create_card()
     layout = QVBoxLayout(window.stats_card)
     layout.setSpacing(12)
@@ -47,3 +48,52 @@ def build_stats_card(window):
         grid.addWidget(card, i // 2, i % 2)
 
     layout.addLayout(grid)
+
+
+def build_final_metrics_panel(window):
+    panel = create_card()
+    layout = QVBoxLayout(panel)
+    layout.setSpacing(12)
+
+    final_title = QLabel("Фінальні KPI (після завершення/паузи)")
+    final_title.setObjectName("Hint")
+    layout.addWidget(final_title)
+
+    final_grid = QGridLayout()
+    final_grid.setHorizontalSpacing(12)
+    final_grid.setVerticalSpacing(12)
+
+    window.baf_card, window.baf_value = stat_card("—", "BAF")
+    window.peak_fire_card, window.peak_fire_value = stat_card("—", "Peak fire size")
+    window.time_to_peak_card, window.time_to_peak_value = stat_card("—", "Time to peak")
+    window.fire_duration_card, window.fire_duration_value = stat_card("—", "Fire duration")
+    window.auc_card, window.auc_value = stat_card("—", "AUC")
+
+    final_cards = [
+        window.baf_card,
+        window.peak_fire_card,
+        window.time_to_peak_card,
+        window.fire_duration_card,
+        window.auc_card,
+    ]
+    for i, card in enumerate(final_cards):
+        final_grid.addWidget(card, i // 2, i % 2)
+
+    layout.addLayout(final_grid)
+    
+    window.metrics_data_state = QLabel("Дані ще не зібрано")
+    window.metrics_data_state.setObjectName("Hint")
+    layout.addWidget(window.metrics_data_state)
+
+    metric_keys_text = ", ".join(metrics_keys())
+    window.metrics_hint = QLabel(
+        f"JSON-ключі: `burning_cells_t`, `final_counts`, `initial_tree_cells`, `metrics` ({metric_keys_text})."
+    )
+    window.metrics_hint.setWordWrap(True)
+    window.metrics_hint.setObjectName("Hint")
+    layout.addWidget(window.metrics_hint)
+
+    window.btn_export_metrics = QPushButton("Експорт метрик")
+    layout.addWidget(window.btn_export_metrics)
+
+    return panel

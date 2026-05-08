@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from src.app.core.ca import BARRIER, BURNT, BURNING_STATES, EMPTY, TREE_CONIF, TREE_DECID
-
 
 class MainWindowStateMixin:
     def _sync_initial_state(self):
@@ -12,15 +10,12 @@ class MainWindowStateMixin:
         self.on_wind_toggled(self.cfg.wind_enabled)
 
     def _cell_counts(self):
-        g = self.ca.grid
-        return {
-            "empty": int((g == EMPTY).sum()),
-            "decid": int((g == TREE_DECID).sum()),
-            "conif": int((g == TREE_CONIF).sum()),
-            "burning": int(sum((g == state).sum() for state in BURNING_STATES)),
-            "barrier": int((g == BARRIER).sum()),
-            "burnt": int((g == BURNT).sum()),
-        }
+        return self.ca.cell_counts()
+
+    def _set_text_if_widget_exists(self, attr_name: str, value: str):
+        widget = getattr(self, attr_name, None)
+        if widget is not None:
+            widget.setText(value)
 
     def _update_stats(self):
         counts = self._cell_counts()
@@ -31,6 +26,30 @@ class MainWindowStateMixin:
         current_rain = self.ca.current_rain_intensity()
         self.rain_value.setText("ВИМК" if current_rain <= 0 else f"{current_rain:.2f}")
         self.status_chip.setText("ВИКОНАННЯ" if self.timer.isActive() else "ГОТОВО")
+
+        metrics = self.last_run_metrics.get("metrics", {})
+        show_final_metrics = bool(self.show_final_metrics and isinstance(metrics, dict))
+
+        baf_text = f"{float(metrics.get('baf', 0.0)):.4f}" if show_final_metrics else "—"
+        peak_text = str(int(metrics.get("peak_fire_size", 0))) if show_final_metrics else "—"
+        time_to_peak_text = str(int(metrics.get("time_to_peak", 0))) if show_final_metrics else "—"
+        fire_duration_text = str(int(metrics.get("fire_duration", 0))) if show_final_metrics else "—"
+        auc_text = str(int(metrics.get("auc", 0))) if show_final_metrics else "—"
+
+        self._set_text_if_widget_exists("baf_value", baf_text)
+        self._set_text_if_widget_exists("peak_fire_value", peak_text)
+        self._set_text_if_widget_exists("time_to_peak_value", time_to_peak_text)
+        self._set_text_if_widget_exists("fire_duration_value", fire_duration_text)
+        self._set_text_if_widget_exists("auc_value", auc_text)
+        self._set_text_if_widget_exists(
+            "metrics_data_state",
+            "Фінальні метрики готові до перегляду та експорту." if show_final_metrics else "Дані ще не зібрано",
+        )
+
+        if hasattr(self, "btn_open_analytics"):
+            self.btn_open_analytics.setEnabled(show_final_metrics)
+        if hasattr(self, "btn_export_metrics"):
+            self.btn_export_metrics.setEnabled(show_final_metrics)
 
     def _update_rain_status(self):
         if self.cfg.rain_scenario_start_step >= self.cfg.rain_scenario_end_step:

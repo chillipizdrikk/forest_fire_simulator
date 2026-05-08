@@ -1,0 +1,290 @@
+defaults:
+  width: 120
+  height: 120
+  init_tree_density: 0.7
+  conifer_ratio: 0.5
+  humidity: 0.35
+  temperature_c: 24.0
+  lightning_enabled: true
+  f: 0.01
+  wind_enabled: false
+  wind_dir: E
+  wind_strength: 0.4
+  rain_enabled: false
+  rain_intensity: 0.0
+
+scenarios:
+  # --- Anchors (extremes) ---
+  - name: anchor_hot_dry
+    params:
+      humidity: 0.10
+      temperature_c: 32.0
+      wind_enabled: true
+      wind_strength: 0.8
+      rain_enabled: false
+      rain_intensity: 0.0
+
+  - name: anchor_cool_wet
+    params:
+      humidity: 0.75
+      temperature_c: 14.0
+      wind_enabled: false
+      wind_strength: 0.2
+      rain_enabled: true
+      rain_intensity: 0.7
+
+  # --- Reference "middle" point ---
+  - name: anchor_mid_windy_rain
+    params:
+      humidity: 0.35
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.75
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  # --- Scenario-local one-factor sweeps for anchor_mid_windy_rain ---
+  - name: anchor_mid_windy_rain_humidity_025
+    params:
+      humidity: 0.25
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.75
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: anchor_mid_windy_rain_humidity_035
+    params:
+      humidity: 0.35
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.75
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: anchor_mid_windy_rain_humidity_045
+    params:
+      humidity: 0.45
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.75
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: anchor_mid_windy_rain_humidity_055
+    params:
+      humidity: 0.55
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.75
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: anchor_mid_windy_rain_wind_strength_04
+    params:
+      humidity: 0.35
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.4
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: anchor_mid_windy_rain_wind_strength_06
+    params:
+      humidity: 0.35
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: anchor_mid_windy_rain_wind_strength_08
+    params:
+      humidity: 0.35
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.8
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: anchor_mid_windy_rain_temperature_c_20
+    params:
+      humidity: 0.35
+      temperature_c: 20.0
+      wind_enabled: true
+      wind_strength: 0.75
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: anchor_mid_windy_rain_temperature_c_24
+    params:
+      humidity: 0.35
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.75
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: anchor_mid_windy_rain_temperature_c_28
+    params:
+      humidity: 0.35
+      temperature_c: 28.0
+      wind_enabled: true
+      wind_strength: 0.75
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  # --- Transitional scenarios ---
+  - name: transition_low_humidity
+    params:
+      humidity: 0.25
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  # --- Scenario-local one-factor sweeps for transition_low_humidity ---
+  - name: transition_low_humidity_humidity_025
+    params:
+      humidity: 0.25
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_low_humidity_humidity_035
+    params:
+      humidity: 0.35
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_low_humidity_humidity_045
+    params:
+      humidity: 0.45
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_low_humidity_humidity_055
+    params:
+      humidity: 0.55
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_low_humidity_wind_strength_04
+    params:
+      humidity: 0.25
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.4
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_low_humidity_wind_strength_06
+    params:
+      humidity: 0.25
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_low_humidity_wind_strength_08
+    params:
+      humidity: 0.25
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.8
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_low_humidity_temperature_c_20
+    params:
+      humidity: 0.25
+      temperature_c: 20.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_low_humidity_temperature_c_24
+    params:
+      humidity: 0.25
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_low_humidity_temperature_c_28
+    params:
+      humidity: 0.25
+      temperature_c: 28.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_mid_humidity
+    params:
+      humidity: 0.40
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_high_humidity
+    params:
+      humidity: 0.55
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_cooler
+    params:
+      humidity: 0.40
+      temperature_c: 20.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_warmer
+    params:
+      humidity: 0.40
+      temperature_c: 28.0
+      wind_enabled: true
+      wind_strength: 0.6
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_weaker_wind
+    params:
+      humidity: 0.40
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.4
+      rain_enabled: true
+      rain_intensity: 0.35
+
+  - name: transition_stronger_wind
+    params:
+      humidity: 0.40
+      temperature_c: 24.0
+      wind_enabled: true
+      wind_strength: 0.8
+      rain_enabled: true
+      rain_intensity: 0.35

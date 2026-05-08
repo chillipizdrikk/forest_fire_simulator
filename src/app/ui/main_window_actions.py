@@ -1,13 +1,26 @@
 from __future__ import annotations
 
+from datetime import datetime
+from pathlib import Path
+
 import numpy as np
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QFileDialog
 
 from src.app.core.ca import CAConfig, ForestFireCA, TREE_CONIF, TREE_DECID
 
 
 class MainWindowActionsMixin:
+    def _save_metrics_snapshot(self):
+        self.ca.finalize_run_metrics()
+        self.last_run_metrics = self.ca.metrics_payload()
+        self.last_run_metrics_json = self.ca.metrics_payload_json()
+        self.show_final_metrics = True
+
     def on_start(self):
+        if self.timer.isActive():
+            return
+
         self.run_has_seen_fire = self.ca.has_active_fire()
         has_trees = bool(np.any((self.ca.grid == TREE_DECID) | (self.ca.grid == TREE_CONIF)))
 
@@ -18,12 +31,19 @@ class MainWindowActionsMixin:
         if not self.ca.has_active_fire() and (not self.cfg.lightning_enabled or self.cfg.f <= 0.0):
             self.statusBar().showMessage("Немає активного займання, а блискавка вимкнена або має нульову ймовірність.", 3500)
             return
+        
+        if not self.run_in_progress:
+            self.ca.start_run_tracking()
+            self.run_has_seen_fire = self.ca.has_active_fire()
+        self.show_final_metrics = False
 
         self.timer.start(self.speed_slider.value())
+        self.run_in_progress = True
         self._update_stats()
 
     def on_pause(self):
         self.timer.stop()
+        self._save_metrics_snapshot()
         self._update_stats()
 
     def on_step(self):
@@ -31,8 +51,12 @@ class MainWindowActionsMixin:
 
     def on_reset(self):
         self.timer.stop()
+        if self.run_in_progress:
+            self._save_metrics_snapshot()
         self.ca.reset()
         self.run_has_seen_fire = False
+        self.run_in_progress = False
+        self.show_final_metrics = False
         self.grid_widget.set_grid(self.ca.grid)
         self._update_rain_status()
         self._update_stats()
@@ -40,14 +64,45 @@ class MainWindowActionsMixin:
 
     def on_apply_size(self):
         self.timer.stop()
+        if self.run_in_progress:
+            self._save_metrics_snapshot()
         self.cfg.width = int(self.w_spin.value())
         self.cfg.height = int(self.h_spin.value())
         self.ca = ForestFireCA(self.cfg)
         self.run_has_seen_fire = False
+        self.run_in_progress = False
+        self.show_final_metrics = False
         self.grid_widget.set_grid(self.ca.grid)
         self._update_rain_status()
         self._update_stats()
         self.statusBar().showMessage("Розмір ґратки оновлено.", 2500)
+
+
+    def on_open_analytics(self):
+        if self.metrics_dialog is None:
+            return
+        self.metrics_dialog.show()
+        self.metrics_dialog.raise_()
+        self.metrics_dialog.activateWindow()
+
+    def on_export_metrics(self):
+        exports_dir = Path.cwd() / "exports" / "metrics"
+        exports_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_path = exports_dir / f"forest_fire_metrics_step_{self.ca.step_count}_{timestamp}.json"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Експорт метрик",
+            str(default_path),
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not file_path:
+            return
+
+        final_path = Path(file_path)
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        final_path.write_text(self.last_run_metrics_json, encoding="utf-8")
+        self.statusBar().showMessage(f"Метрики збережено у файл: {final_path.resolve()}", 3500)
 
     def on_tick(self):
         self.ca.step()
@@ -64,18 +119,24 @@ class MainWindowActionsMixin:
 
         if self.timer.isActive() and not has_trees:
             self.timer.stop()
+            self._save_metrics_snapshot()
+            self.run_in_progress = False
             self._update_stats()
             self.statusBar().showMessage("На карті більше немає дерев. Симуляцію зупинено.", 2500)
             return
 
         if self.timer.isActive() and not has_active_fire and not has_future_ignition_sources:
             self.timer.stop()
+            self._save_metrics_snapshot()
+            self.run_in_progress = False
             self._update_stats()
             self.statusBar().showMessage("Активного вогню немає і нові займання неможливі. Симуляцію зупинено.", 2500)
             return
 
         if self.run_has_seen_fire and not has_active_fire:
             self.timer.stop()
+            self._save_metrics_snapshot()
+            self.run_in_progress = False
             self._update_stats()
             self.statusBar().showMessage("Пожежний інцидент завершився.", 2500)
 
@@ -83,6 +144,11 @@ class MainWindowActionsMixin:
         if self.timer.isActive():
             self.statusBar().showMessage("Натисни «Пауза», щоб редагувати мапу.", 1400)
             return
+        
+        if self.run_in_progress:
+            self._save_metrics_snapshot()
+            self.run_in_progress = False
+            self.run_has_seen_fire = self.ca.has_active_fire()
 
         if button == Qt.RightButton.value:
             self.ca.set_empty(row, col)

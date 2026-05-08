@@ -8,7 +8,7 @@ from src.app.ui.bindings import connect_main_window_signals
 from src.app.ui.grid_widget import GridWidget
 from src.app.ui.main_window_actions import MainWindowActionsMixin
 from src.app.ui.main_window_state import MainWindowStateMixin
-from src.app.ui.panels import build_all_controls, build_controls_tabs, build_legend_card, build_stats_card
+from src.app.ui.panels import MetricsDialog, build_all_controls, build_controls_tabs, build_legend_card, build_live_stats_card
 from src.app.ui.panels.common import create_card
 from src.app.ui.styles import apply_main_window_styles
 
@@ -42,6 +42,10 @@ class MainWindow(MainWindowActionsMixin, MainWindowStateMixin, QMainWindow):
         )
         self.ca = ForestFireCA(self.cfg)
         self.run_has_seen_fire = False
+        self.run_in_progress = False
+        self.show_final_metrics = False
+        self.last_run_metrics: dict[str, object] = self.ca.metrics_payload()
+        self.last_run_metrics_json: str = self.ca.metrics_payload_json()
 
         apply_main_window_styles(self)
         self._build_ui()
@@ -88,9 +92,14 @@ class MainWindow(MainWindowActionsMixin, MainWindowStateMixin, QMainWindow):
         text_col.addWidget(sim_hint)
         top_bar.addLayout(text_col, 1)
 
+        top_actions = QVBoxLayout()
+        top_actions.setSpacing(8)
+
         self.status_chip = QLabel("ГОТОВО")
         self.status_chip.setObjectName("ValueBadge")
-        top_bar.addWidget(self.status_chip, 0, Qt.AlignTop)
+        top_actions.addWidget(self.status_chip, 0, Qt.AlignRight)
+
+        top_bar.addLayout(top_actions)
 
         sim_layout.addLayout(top_bar)
 
@@ -112,10 +121,12 @@ class MainWindow(MainWindowActionsMixin, MainWindowStateMixin, QMainWindow):
         side_title.setObjectName("SectionTitle")
         right_layout.addWidget(side_title)
 
-        build_stats_card(self)
+        build_live_stats_card(self)
         right_layout.addWidget(self.stats_card)
 
         build_controls_tabs(self, right_layout)
         build_all_controls(self)
+
+        self.metrics_dialog = MetricsDialog(self)
 
         self.statusBar().showMessage("Готово до редагування мапи.")

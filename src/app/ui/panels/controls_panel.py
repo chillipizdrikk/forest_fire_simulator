@@ -67,6 +67,9 @@ def build_controls_group(window):
     btn_row.addWidget(window.btn_pause, 0, 1)
     btn_row.addWidget(window.btn_step, 1, 0)
     btn_row.addWidget(window.btn_reset, 1, 1)
+    window.btn_open_analytics = QPushButton("Відкрити аналітику")
+    window.btn_open_analytics.setObjectName("SecondaryBtn")
+    btn_row.addWidget(window.btn_open_analytics, 2, 0, 1, 2)
     layout.addLayout(btn_row)
 
     size_row = QHBoxLayout()

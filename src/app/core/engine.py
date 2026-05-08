@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import numpy as np
 
 from src.app.core.config import CAConfig
@@ -15,6 +16,8 @@ from src.app.core.constants import (
     TREE_DECID,
     TREE_STATES,
 )
+from src.app.core.metrics import calculate_fire_metrics, metrics_to_json
+from src.app.core.metrics import METRICS_PAYLOAD_SCHEMA_VERSION
 
 
 class ForestFireCA:
@@ -38,6 +41,11 @@ class ForestFireCA:
         self.grid = self._make_initial_grid()
         self.step_count = 0
         self._lightning_cooldown = 0
+        self.initial_tree_cells = 0
+        self.burning_cells_history: list[int] = []
+        self.final_counts: dict[str, int] = {}
+        self.latest_metrics: dict[str, int | float] = {}
+        self.start_run_tracking()
 
     def _make_initial_grid(self) -> np.ndarray:
         cfg = self.cfg
@@ -58,9 +66,87 @@ class ForestFireCA:
         self.grid = self._make_initial_grid()
         self.step_count = 0
         self._lightning_cooldown = 0
+        self.start_run_tracking()
 
     def has_active_fire(self) -> bool:
         return bool(np.any((self.grid == BURNING1) | (self.grid == BURNING2) | (self.grid == BURNING3)))
+
+    def _burning_cells_count(self) -> int:
+        return int(np.count_nonzero((self.grid == BURNING1) | (self.grid == BURNING2) | (self.grid == BURNING3)))
+
+    def cell_counts(self) -> dict[str, int]:
+        g = self.grid
+        return {
+            "empty": int(np.count_nonzero(g == EMPTY)),
+            "decid": int(np.count_nonzero(g == TREE_DECID)),
+            "conif": int(np.count_nonzero(g == TREE_CONIF)),
+            "burning": self._burning_cells_count(),
+            "barrier": int(np.count_nonzero(g == BARRIER)),
+            "burnt": int(np.count_nonzero(g == BURNT)),
+        }
+
+    def start_run_tracking(self):
+        trees = (self.grid == TREE_DECID) | (self.grid == TREE_CONIF)
+        self.initial_tree_cells = int(np.count_nonzero(trees))
+        self.burning_cells_history = [self._burning_cells_count()]
+        self.final_counts = self.cell_counts()
+        self.latest_metrics = calculate_fire_metrics(
+            burning_cells=self.burning_cells_history,
+            initial_tree_cells=self.initial_tree_cells,
+            final_counts=self.final_counts,
+            burnt_mask=(self.grid == BURNT),
+        )
+
+    def finalize_run_metrics(self) -> dict[str, int | float]:
+        self.final_counts = self.cell_counts()
+        self.latest_metrics = calculate_fire_metrics(
+            burning_cells=self.burning_cells_history,
+            initial_tree_cells=self.initial_tree_cells,
+            final_counts=self.final_counts,
+            burnt_mask=(self.grid == BURNT),
+        )
+        return self.latest_metrics
+
+    def metrics_payload(self) -> dict[str, object]:
+        config_snapshot = {
+            "width": int(self.cfg.width),
+            "height": int(self.cfg.height),
+            "f": float(self.cfg.f),
+            "lightning_enabled": bool(self.cfg.lightning_enabled),
+            "lightning_max_strikes_per_event": int(self.cfg.lightning_max_strikes_per_event),
+            "lightning_cooldown_steps": int(self.cfg.lightning_cooldown_steps),
+            "humidity": float(self.cfg.humidity),
+            "temperature_c": float(self.cfg.temperature_c),
+            "wind_enabled": bool(self.cfg.wind_enabled),
+            "wind_dir": str(self.cfg.wind_dir),
+            "wind_strength": float(self.cfg.wind_strength),
+            "init_tree_density": float(self.cfg.init_tree_density),
+            "conifer_ratio": float(self.cfg.conifer_ratio),
+            "flamm_decid": float(self.cfg.flamm_decid),
+            "flamm_conif": float(self.cfg.flamm_conif),
+            "burn_stage_factors": [float(v) for v in self.cfg.burn_stage_factors],
+            "rain_enabled": bool(self.cfg.rain_enabled),
+            "rain_intensity": float(self.cfg.rain_intensity),
+            "rain_scenario_enabled": bool(self.cfg.rain_scenario_enabled),
+            "rain_scenario_start_step": int(self.cfg.rain_scenario_start_step),
+            "rain_scenario_end_step": int(self.cfg.rain_scenario_end_step),
+            "rain_scenario_intensity": float(self.cfg.rain_scenario_intensity),
+        }
+
+        return {
+            "schema_version": METRICS_PAYLOAD_SCHEMA_VERSION,
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "seed": self.cfg.seed,
+            "step_count": int(self.step_count),
+            "initial_tree_cells": int(self.initial_tree_cells),
+            "burning_cells_t": [int(v) for v in self.burning_cells_history],
+            "final_counts": {key: int(value) for key, value in self.final_counts.items()},
+            "metrics": dict(self.latest_metrics),
+            "config_snapshot": config_snapshot,
+        }
+
+    def metrics_payload_json(self) -> str:
+        return metrics_to_json(self.metrics_payload())
 
     def current_rain_intensity(self) -> float:
         manual = float(self.cfg.rain_intensity) if self.cfg.rain_enabled else 0.0
@@ -126,9 +212,21 @@ class ForestFireCA:
         w_norm = (wx * wx + wy * wy) ** 0.5
         dot = (dx * wx + dy * wy) / (d_norm * w_norm)
 
-        s = float(self.cfg.wind_strength)
-        p = 1.0 - s * (1.0 - dot) / 2.0
-        return float(np.clip(p, 0.0, 1.0))
+        # s = float(self.cfg.wind_strength)
+        # p = 1.0 - s * (1.0 - dot) / 2.0
+        # return float(np.clip(p, 0.0, 1.0))
+        
+        s = float(np.clip(self.cfg.wind_strength, 0.0, 1.0))
+        downwind_factor = 1.0 + s
+        crosswind_factor = 1.0 - 0.25 * s
+        upwind_factor = 1.0 - s
+
+        if dot >= 0.0:
+            p = crosswind_factor + dot * (downwind_factor - crosswind_factor)
+        else:
+            p = crosswind_factor + (-dot) * (upwind_factor - crosswind_factor)
+
+        return float(max(p, 0.0))
 
     def _temp_norm(self) -> float:
         t = float(self.cfg.temperature_c)
@@ -245,4 +343,5 @@ class ForestFireCA:
 
         self.grid = next_g
         self.step_count += 1
+        self.burning_cells_history.append(self._burning_cells_count())
         return self.grid
