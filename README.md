@@ -26,6 +26,67 @@ PySide6 desktop simulator for modeling forest fire spread with a cellular automa
 .\venv\Scripts\activate
 ```
 
+## Reproducibility
+
+This project keeps the runtime dependencies in `requirements.txt`. The file hard-pins the direct dependencies used for reproducible CLI/report runs:
+
+Create and activate a virtual environment, then install dependencies:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+PowerShell equivalent:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Run the test suite:
+
+```bash
+python -m pytest
+```
+
+Run the main experiment batch with deterministic seeding:
+
+```bash
+python run_experiments.py \
+  --scenarios scenarios.yaml \
+  --n 100 \
+  --seed 42 \
+  --results-dir results/raw \
+  --reports-dir reports
+```
+
+Fully reproduce the OFAT sensitivity report from `scenarios_sensitivity.yaml`:
+
+```bash
+python run_experiments.py \
+  --scenarios scenarios_sensitivity.yaml \
+  --n 100 \
+  --seed 42 \
+  --max-steps 500 \
+  --critical-baf-threshold 0.8 \
+  --censor-target-share 0.02 \
+  --censor-max-retries 2 \
+  --censor-step-multiplier 1.6 \
+  --results-dir results/raw/sensitivity \
+  --reports-dir reports/sensitivity
+```
+
+To capture the full transitive dependency tree for archival reproducibility after installation, generate a separate lock snapshot with:
+
+```bash
+python -m pip freeze > requirements-lock.txt
+```
+
 ## Run UI
 
 ```bash
