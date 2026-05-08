@@ -1653,7 +1653,16 @@ def generate_report(
         )
 
     md_lines.append("")
-    md_lines.append("## continuous_param_correlations (uncontrolled)")
+    md_lines.append("## Global parameter sensitivity")
+    md_lines.append(
+        "- Purpose: estimates the overall influence of simultaneously varied parameters and their interactions "
+        "across the experiment design. Use this separately from OFAT sensitivity, which reports local one-factor trends."
+    )
+    md_lines.append(
+        "- Report inputs: continuous_param_correlations, binary_param_effects, and interaction_surface summaries "
+        "computed from the full run table."
+    )
+    md_lines.append("### continuous_param_correlations (uncontrolled)")
     md_lines.append("- Note: these are global Pearson correlations for continuous params only.")
     for item in top_continuous_corr_uncontrolled:
         md_lines.append(
@@ -1664,7 +1673,7 @@ def generate_report(
             f"q<=0.05={bool(item['q_le_005'])}"
         )
     md_lines.append("")
-    md_lines.append("## continuous_param_correlations (controlled by scenario)")
+    md_lines.append("### continuous_param_correlations (controlled by scenario)")
     md_lines.append("- Method: within-scenario demeaning (scenario fixed-effects style).")
     for item in top_continuous_corr_controlled:
         md_lines.append(
@@ -1675,7 +1684,7 @@ def generate_report(
             f"q<=0.05={bool(item['q_le_005'])}"
         )
     md_lines.append("")
-    md_lines.append("## binary_param_effects")
+    md_lines.append("### binary_param_effects")
     md_lines.append("- For binary params: mean(True)-mean(False), plus point-biserial correlation with 95% CI.")
     for pkey, mkey, mean_diff, corr, ci_low, ci_high in top_binary_effects:
         md_lines.append(
@@ -1723,7 +1732,11 @@ def generate_report(
             )
 
     md_lines.append("")
-    md_lines.append("## Family-level parameter sensitivity (OFAT-aware)")
+    md_lines.append("## OFAT sensitivity (local one-factor trends)")
+    md_lines.append(
+        "- Purpose: estimates local trends around fixed base scenarios by changing one parameter at a time. "
+        "Do not interpret OFAT slopes as global parameter importance when multiple parameters vary together."
+    )
     md_lines.append(
         "- Grouping rule: OFAT scenarios are grouped by axis `<base> / <varied_param>` "
         "(e.g. `transition_low_humidity / humidity`)."
@@ -1761,9 +1774,10 @@ def generate_report(
 
     if summary.interaction_surfaces:
         md_lines.append("")
-        md_lines.append("## 2D sensitivity (interaction surface)")
+        md_lines.append("### 2D sensitivity (interaction surface)")
         md_lines.append(
-            "- Built from two most influential continuous params for `baf` (by |r| in global correlations)."
+            "- Built from two most influential continuous params for `baf` (by |r| in global correlations) "
+            "as the interaction_surface part of global sensitivity."
         )
         for surface in summary.interaction_surfaces:
             score = float(surface.get("interaction_score_baf", 0.0))
@@ -2025,7 +2039,16 @@ def generate_report(
             "</li>"
         )
     html_lines.append("</ul>")
-    html_lines.append("<h2>continuous_param_correlations (uncontrolled)</h2>")
+    html_lines.append("<h2>Global parameter sensitivity</h2>")
+    html_lines.append(
+        "<p>Purpose: estimates the overall influence of simultaneously varied parameters and their interactions "
+        "across the experiment design. Use this separately from OFAT sensitivity, which reports local one-factor trends.</p>"
+    )
+    html_lines.append(
+        "<p>Report inputs: continuous_param_correlations, binary_param_effects, and interaction_surface summaries "
+        "computed from the full run table.</p>"
+    )
+    html_lines.append("<h3>continuous_param_correlations (uncontrolled)</h3>")
     html_lines.append(
         "<p>Note: global Pearson correlations for continuous params; includes r, CI, p, BH q, and q&lt;=0.05 flag."
         f" Ranking mode: {sensitivity_ranking}.</p><ul>"
@@ -2039,7 +2062,7 @@ def generate_report(
             f"q&lt;=0.05={bool(item['q_le_005'])}</li>"
         )
     html_lines.append("</ul>")
-    html_lines.append("<h2>continuous_param_correlations (controlled by scenario)</h2>")
+    html_lines.append("<h3>continuous_param_correlations (controlled by scenario)</h3>")
     html_lines.append(f"<p>Method: within-scenario demeaning (scenario fixed-effects style). Ranking mode: {sensitivity_ranking}.</p><ul>")
     for item in top_continuous_corr_controlled:
         html_lines.append(
@@ -2050,7 +2073,7 @@ def generate_report(
             f"q&lt;=0.05={bool(item['q_le_005'])}</li>"
         )
     html_lines.append("</ul>")
-    html_lines.append("<h2>binary_param_effects</h2>")
+    html_lines.append("<h3>binary_param_effects</h3>")
     html_lines.append(
         "<p>For binary params: mean(True)-mean(False), plus point-biserial correlation with 95% CI.</p><ul>"
     )
@@ -2102,7 +2125,11 @@ def generate_report(
                 f"({len(constant_param_keys)}): {shown_keys}{suffix}</p>"
             )
 
-    html_lines.append("<h2>Family-level parameter sensitivity (OFAT-aware)</h2>")
+    html_lines.append("<h2>OFAT sensitivity (local one-factor trends)</h2>")
+    html_lines.append(
+        "<p>Purpose: estimates local trends around fixed base scenarios by changing one parameter at a time. "
+        "Do not interpret OFAT slopes as global parameter importance when multiple parameters vary together.</p>"
+    )
     html_lines.append(
         "<p>Grouping rule: OFAT scenarios are grouped by axis "
         "<code>&lt;base&gt; / &lt;varied_param&gt;</code> "
@@ -2142,10 +2169,10 @@ def generate_report(
             )
 
     if summary.interaction_surfaces:
-        html_lines.append("<h2>2D sensitivity (interaction surface)</h2>")
+        html_lines.append("<h3>2D sensitivity (interaction surface)</h3>")
         html_lines.append(
             "<p>Built from two most influential continuous params for <code>baf</code> "
-            "(by absolute global correlation).</p>"
+            "(by absolute global correlation) as the interaction_surface part of global sensitivity.</p>"
         )
         html_lines.append("<ul>")
         for surface in summary.interaction_surfaces:

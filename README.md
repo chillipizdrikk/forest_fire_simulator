@@ -112,6 +112,27 @@ PowerShell (одним рядком):
 python run_experiments.py --scenarios scenarios_sensitivity.yaml --n 100 --seed 42 --results-dir results/raw/sensitivity --reports-dir reports/sensitivity
 ```
 
+- Для global sensitivity (одночасна зміна 5 параметрів у перехідній зоні) використовуйте `scenarios_global_sensitivity.yaml`:
+
+```bash
+python run_experiments.py \
+  --scenarios scenarios_global_sensitivity.yaml \
+  --n 100 \
+  --seed 42 \
+  --results-dir results/raw/global_sensitivity \
+  --reports-dir reports/global_sensitivity
+```
+
+PowerShell (одним рядком):
+
+```powershell
+python run_experiments.py --scenarios scenarios_global_sensitivity.yaml --n 100 --seed 42 --results-dir results/raw/global_sensitivity --reports-dir reports/global_sensitivity
+```
+
+У дипломній роботі розділяйте ці два типи sensitivity-аналізу:
+- **OFAT sensitivity** (`scenarios_sensitivity.yaml`) — локальні тренди біля фіксованих базових сценаріїв, коли змінюється один фактор.
+- **Global sensitivity** (`scenarios_global_sensitivity.yaml`) — загальний вплив параметрів за одночасної зміни `humidity`, `temperature_c`, `wind_strength`, `rain_intensity`, `conifer_ratio`, включно з 2D взаємодіями у звіті.
+
 Outputs:
 
 - Raw results: `results/raw/experiment_results_<timestamp>.csv`
