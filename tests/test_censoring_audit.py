@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.app.experiments.analysis import analyze_results, generate_report
+from src.app.experiments.analysis import analyze_results
+from src.app.experiments.reporting import generate_report
 
 
 def _sample_rows() -> list[dict[str, object]]:
