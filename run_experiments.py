@@ -5,7 +5,8 @@ from pathlib import Path
 import sys
 from typing import Any
 
-from src.app.experiments.analysis import analyze_results, generate_report
+from src.app.experiments.analysis import analyze_results
+from src.app.experiments.reporting import generate_report
 from src.app.experiments.scenarios import load_scenarios
 
 

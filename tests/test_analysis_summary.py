@@ -9,10 +9,10 @@ from src.app.experiments.analysis import (
     _collect_top_correlations,
     _sort_correlations,
     _parse_ofat_scenario_name,
-    _save_plots,
-    generate_report,
     analyze_results,
 )
+from src.app.experiments.plots import _save_plots
+from src.app.experiments.reporting import generate_report
 
 
 def test_analyze_results_does_not_mutate_input_rows() -> None:
